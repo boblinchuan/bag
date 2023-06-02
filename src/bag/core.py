@@ -915,6 +915,7 @@ class BagProject:
         else:
             gen_specs = specs
             params_key = 'dut_params'
+        name_prefix = specs.get('name_prefix', '')
         static_info: str = specs.get('static_info', '')
         if static_info:
             if not extract:
@@ -934,6 +935,7 @@ class BagProject:
                     dut_params=gen_specs[params_key],
                     extract=extract,
                     export_lay=gen_cell_dut & extract,
+                    name_prefix=name_prefix,
                 )]
         impl_lib: str = gen_specs['impl_lib']
         root_dir: Union[str, Path] = gen_specs['root_dir']
@@ -950,6 +952,7 @@ class BagProject:
             else:
                 _gen_specs = _specs
                 _params_key = 'dut_params'
+            name_prefix = _gen_specs.get('name_prefix', '')
             _static_info: str = _specs.get('static_info', '')
             if _static_info:
                 if not _extract:
@@ -966,6 +969,7 @@ class BagProject:
                     dut_params=_gen_specs[_params_key],
                     extract=_extract,
                     export_lay=gen_cell_dut & _extract,
+                    name_prefix=name_prefix,
                 ))
 
         meas_rel_dir: str = specs.get('meas_rel_dir', '')
