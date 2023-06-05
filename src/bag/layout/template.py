@@ -2497,14 +2497,16 @@ class TemplateBase(DesignMaster):
         nidx = nout_warr.track_id.base_index
         width = p_tid.width
 
+        _tr_lower = min(pout_warr.lower, nout_warr.lower)
+        _tr_upper = max(pout_warr.upper, nout_warr.upper)
         if track_lower is None:
-            tr_lower = pout_warr.lower
+            tr_lower = _tr_lower
         else:
-            tr_lower = min(track_lower, pout_warr.lower)
+            tr_lower = min(track_lower, _tr_lower)
         if track_upper is None:
-            tr_upper = pout_warr.upper
+            tr_upper = _tr_upper
         else:
-            tr_upper = max(track_upper, pout_warr.upper)
+            tr_upper = max(track_upper, _tr_upper)
 
         return self.connect_differential_tracks(pin_warrs, nin_warrs, lay_id, pidx, nidx,
                                                 width=width, track_lower=tr_lower,
@@ -2675,14 +2677,18 @@ class TemplateBase(DesignMaster):
             the layer ID on which to draw power fill.
         tr_manager : TrackManager
             the TrackManager object.
-        sup_list : List[Union[WireArray, List[WireArray]]]
-            a list of supply wires to draw power fill for.
+        vdd_warrs : Optional[List[Union[WireArray, List[WireArray]]]]
+            a list of VDD supply wires to connect to power fill.
+        vss_warrs : Optional[List[Union[WireArray, List[WireArray]]]]
+            a list of VSS supply wires to connect to power fill.
         bound_box : Optional[BBox]
             bound box over which to draw the power fill
         x_margin : int
             keepout margin on the x-axis. Fill is centered within margin.
         y_margin : int
             keepout margin on the y-axis. Fill is centered within margin.
+        sup_type: str
+            Supply fill type. Allowed options are 'vdd', 'vss', or 'both'
         uniform_grid : bool
             draw power fill on a common grid instead of dense packing.
         flip : bool
@@ -2699,7 +2705,7 @@ class TemplateBase(DesignMaster):
         if not vdd_warrs and not vss_warrs:
             raise ValueError('At least one of vdd_warrs or vss_warrs must be given.')
 
-        # Build supply lists based on specficiation
+        # Build supply lists based on specification
         if sup_type.lower() == 'both' and vdd_warrs and vss_warrs:
             top_lists = [vdd_warrs, vss_warrs]
         elif sup_type.lower() == 'vss' and vss_warrs:
@@ -2722,11 +2728,14 @@ class TemplateBase(DesignMaster):
         elif sup_type.lower() == 'vdd':
             top_vss = []
             top_vdd = ret_warrs[0]
+        else:
+            raise RuntimeError('Provided supply type and supply wires do not match.')
 
         return top_vdd, top_vss
 
-    def do_multi_power_fill(self, layer_id: int, tr_manager: TrackManager, sup_list: List[Union[WireArray, List[WireArray]]],
-                            bound_box: Optional[BBox] = None, x_margin: int = 0, y_margin: int = 0, flip: bool = False,
+    def do_multi_power_fill(self, layer_id: int, tr_manager: TrackManager,
+                            sup_list: List[Union[WireArray, List[WireArray]]], bound_box: Optional[BBox] = None,
+                            x_margin: int = 0, y_margin: int = 0, flip: bool = False,
                             uniform_grid: bool = False) -> List[List[WireArray]]:
         """Draw power fill on the given layer. Accepts as many different supply nets as provided.
 
