@@ -177,7 +177,8 @@ class VirtuosoChecker(SubProcessChecker, ABC):
 
         if netlist is not None:
             if netlist:
-                shutil.copy(netlist, str(sch_path))
+                if Path(netlist) != sch_path:
+                    shutil.copy(netlist, str(sch_path))
             else:
                 info = self.setup_export_schematic(lib_name, cell_name, str(sch_path), sch_view)
                 flow_list.append((info[0], info[1], info[2], info[3], all_pass_callback))
