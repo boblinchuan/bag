@@ -129,6 +129,45 @@ procedure( parse_data_from_file_helper( p )
     )
 )
 
+; return a list of cells in the given library.
+procedure( get_cells_in_library( lib_name "t" )
+    let( ( lib_obj ans )
+        if( lib_obj = ddGetObj(lib_name nil nil nil nil "r") then
+            ans = ddGetObjChildren(lib_obj)~>name
+            ddReleaseObj(lib_obj)
+        else
+            ; library does not exist, return empty list
+            ans = '()
+        )
+        ans
+    )
+)
+
+; print a list of cells in the given library in a given file.
+procedure( get_cells_in_library_file( lib_name fname "tt" )
+    let( ( p )
+        p = outfile( fname "w" )
+        foreach( cell get_cells_in_library(lib_name)
+            fprintf(p "%s\n" cell)
+        )
+        close(p)
+    )
+)
+
+; return the directory corresponding to the given library.
+procedure( get_lib_directory(lib_name "t")
+    let( ( lib_obj ans )
+        if( lib_obj = ddGetObj(lib_name nil nil nil nil "r") then
+            ans = lib_obj~>readPath
+            ddReleaseObj(lib_obj)
+        else
+            ; library does not exist, return empty list
+            ans = ""
+        )
+        ans
+    )
+)
+
 ; close all opened cellviews
 procedure( close_all_cellviews()
     foreach( cv dbGetOpenCellViews()
