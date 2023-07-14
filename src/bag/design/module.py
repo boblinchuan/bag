@@ -674,17 +674,19 @@ class Module(DesignMaster):
         # update instance dictionary
         orig_inst = self.instances.pop(inst_name)
         db = orig_inst.database
-        cur_dx = cur_dy = 0
         if dx == 0 and dy == 0:
             dx = orig_inst.width
+        if orig_inst.prev_name:
+            # 1. If instance has already been arrayed or renamed previously, preserve original prev_name, dx, dy.
+            prev_name = orig_inst.prev_name
+            cur_dx = orig_inst.dx
+            cur_dy = orig_inst.dy
+        else:
+            # 2. Otherwise, inst_name is the prev_name.
+            prev_name = inst_name
+            cur_dx = cur_dy = 0
         for name in inst_name_list:
             inst_ptr = self._cv.get_inst_ref(name)
-            if orig_inst.prev_name:
-                # 1. If instance has already been arrayed or renamed previously, preserve original prev_name.
-                prev_name = orig_inst.prev_name
-            else:
-                # 2. Otherwise inst_name is the prev_name.
-                prev_name = inst_name
             self.instances[name] = SchInstance(db, inst_ptr, master=orig_inst.master, prev_name=prev_name,
                                                dx=cur_dx, dy=cur_dy)
             cur_dx += dx
