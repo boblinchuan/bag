@@ -484,7 +484,7 @@ class BagProject:
                                         square_bracket=square_bracket)
                 if not raw:
                     # import the gds into Virtuoso
-                    self.import_layout(layout_file, impl_lib, impl_cell)
+                    self.import_layout(layout_file, impl_lib, f'{name_prefix}{impl_cell}{name_suffix}')
                     # lay_db.batch_layout(dut_list, output=DesignOutput.LAYOUT,
                     #                     exact_cell_names=exact_cell_names)
 

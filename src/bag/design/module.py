@@ -302,10 +302,13 @@ class Module(DesignMaster):
             for inst_name, inst in self.instances.items():
                 if not inst.should_delete:
                     cur_lib = inst.get_master_lib_name(self.lib_name)
+                    _cell_name = inst.master_cell_name
+                    if cur_lib != 'BAG_prim':
+                        _cell_name = f'{name_prefix}{_cell_name}{name_suffix}'
                     info = dict(
                         name=inst_name,
                         lib_name=cur_lib,
-                        cell_name=inst.master_cell_name,
+                        cell_name=_cell_name,
                         params=inst.params(),
                         term_mapping=inst.connections(),
                         dx=inst.dx,
