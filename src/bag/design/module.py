@@ -192,6 +192,15 @@ class Module(DesignMaster):
     def pins(self) -> Mapping[str, TermType]:
         return self._pins
 
+    @property
+    def ordered_pin_names(self) -> Sequence[str]:
+        # port order: input, output, inout
+        _ports = {TermType.input: [], TermType.output: [], TermType.inout: []}
+        for _name, _type in self.pins.items():
+            _ports[_type].extend(get_cdba_name_bits(_name))
+        pin_names = _ports[TermType.input] + _ports[TermType.output] + _ports[TermType.inout]
+        return pin_names
+
     @abc.abstractmethod
     def design(self, **kwargs: Any) -> None:
         """To be overridden by subclasses to design this module.
@@ -327,13 +336,8 @@ class Module(DesignMaster):
             for inst_name in self.deleted_instances:
                 inst_map[inst_name] = []
 
-            # port_order: input, output, inout
-            _ports = {TermType.input: [], TermType.output: [], TermType.inout: []}
-            for _name, _type in self.pins.items():
-                _ports[_type].extend(get_cdba_name_bits(_name))
-            port_order = _ports[TermType.input] + _ports[TermType.output] + _ports[TermType.inout]
             return cell_name, (self._orig_lib_name, self._orig_cell_name, self.pin_map, inst_map, self.new_pins,
-                               port_order)
+                               self.ordered_pin_names)
 
         netlist = ''
         if not shell and output_type.is_model:
