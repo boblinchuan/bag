@@ -440,6 +440,14 @@ class SimulationDB(LoggingBase):
     def gen_sch_tb(self) -> bool:
         return self._dsn_db.gen_sch_tb
 
+    @property
+    def sim_dir_path(self) -> Path:
+        return self._sim.dir_path
+
+    @property
+    def force_sim(self) -> bool:
+        return self._force_sim
+
     def make_tbm(self, tbm_cls: Union[Type[TestbenchManager], str], tbm_specs: Mapping[str, Any],
                  work_dir: Optional[Path] = None, tb_name: str = '',
                  logger: Optional[FileLogger] = None) -> TestbenchManager:
