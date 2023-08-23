@@ -606,8 +606,9 @@ class BagProject:
             if sim_netlist:
                 raise ValueError('Cannot generate simulation netlist from custom cellview')
 
-            print('exporting netlist')
-            self.impl_db.export_schematic(impl_lib, impl_cell, netlist_file)
+            if not raw:
+                print('exporting netlist from custom cellview')
+                self.impl_db.export_schematic(impl_lib, impl_cell, netlist_file)
 
         if impl_cell in exact_cell_names:
             gen_cell_name = impl_cell
