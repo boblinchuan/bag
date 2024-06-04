@@ -194,12 +194,12 @@ class Module(DesignMaster):
 
     @property
     def ordered_pin_names(self) -> Sequence[str]:
-        # port order: input, output, inout
+        # port order: output, inout, input
         _ports = {TermType.input: [], TermType.output: [], TermType.inout: []}
         for _name, _type in self.pins.items():
             # Do not split arrayed pin names into bits here. Use DesignInstance.pin_bit_names if needed.
             _ports[_type].append(_name)
-        pin_names = _ports[TermType.input] + _ports[TermType.output] + _ports[TermType.inout]
+        pin_names = _ports[TermType.output] + _ports[TermType.inout] + _ports[TermType.input]
         return pin_names
 
     @abc.abstractmethod

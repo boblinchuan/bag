@@ -27,7 +27,7 @@ import tempfile
 from pathlib import Path
 from dataclasses import dataclass
 
-from pybag.enum import DesignOutput, LogLevel
+from pybag.enum import DesignOutput, LogLevel, TermType
 from pybag.core import FileLogger, PySchCellViewInfo, get_cdba_name_bits
 
 from ..env import get_gds_layer_map, get_gds_object_map
@@ -58,11 +58,20 @@ class DesignInstance:
     lay_master: Optional[TemplateBase]
     netlist_path: Path
     cv_info_list: List[PySchCellViewInfo]
-    pin_names: Sequence[str]
+    pins: Mapping[str, TermType]
 
     @property
     def cache_name(self) -> str:
         return self.netlist_path.parent.name
+
+    @property
+    def pin_names(self) -> Sequence[str]:
+        _ports = {TermType.input: [], TermType.output: [], TermType.inout: []}
+        for _name, _type in self.pins.items():
+            # Do not split arrayed pin names into bits here. Use DesignInstance.pin_bit_names if needed.
+            _ports[_type].append(_name)
+        pin_names = _ports[TermType.output] + _ports[TermType.inout] + _ports[TermType.input]
+        return pin_names
 
     @property
     def pin_bit_names(self) -> Sequence[str]:
@@ -163,7 +172,13 @@ class DesignDB(LoggingBase):
                 else:
                     ext_path = None
                     ext_netlist = Path(use_netlist)
-                dut_pins = _info['in_terms'] + _info['out_terms'] + _info['io_terms']
+                dut_pins = {}
+                for _term in _info['out_terms']:
+                    dut_pins[_term] = TermType.output
+                for _term in _info['io_terms']:
+                    dut_pins[_term] = TermType.inout
+                for _term in _info['in_terms']:
+                    dut_pins[_term] = TermType.input
                 dut = DesignInstance(_info['lib_name'], cell_name, None, None, ext_netlist,
                                      [PySchCellViewInfo(static_info)], dut_pins)
             else:
@@ -345,7 +360,7 @@ class DesignDB(LoggingBase):
                                                  exact_cell_names=exact_cell_names, flat=flat)
 
         return DesignInstance(self._sch_db.lib_name, impl_cell, sch_master, lay_master, ans, cv_info_out,
-                              sch_master.ordered_pin_names), extract_info, is_cached
+                              sch_master.pins), extract_info, is_cached
 
     async def gds_check_cache(self, gds_file: str, cur_dir: Path) -> bool:
         if not gds_file:
