@@ -254,6 +254,7 @@ class TestbenchManager(abc.ABC):
             swp_info=self.swp_info,
             options=self._specs.get('sim_options', {}),
             monte_carlo=self._specs.get('monte_carlo_params', {}),
+            init_voltages=self._specs.get('init_voltages', {}),
             env_params=env_values,
         )
         return sim_setup
