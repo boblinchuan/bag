@@ -15,6 +15,7 @@
 
 """netlist processing utilities."""
 
+
 from __future__ import annotations
 
 from typing import Union, List, Dict, Set, Callable, TextIO, Any
@@ -29,6 +30,10 @@ from ..util.search import get_new_name
 from ..io.file import open_file
 from ..io.string import wrap_string
 
+# TODO: none of these get used anywhere. Deprecate?
+from warnings import warn
+warn("bag.design.netlist is not actively used. This file will be deprecated.", DeprecationWarning)
+
 
 def guess_netlist_type(netlist_in: Union[Path, str]) -> DesignOutput:
     if isinstance(netlist_in, str):
@@ -39,6 +44,8 @@ def guess_netlist_type(netlist_in: Union[Path, str]) -> DesignOutput:
         return DesignOutput.CDL
     elif ext == 'scs':
         return DesignOutput.SPECTRE
+    elif ext == 'cir':
+        return DesignOutput.NGSPICE
 
     with open_file(netlist_in, 'r') as f:
         for line in f:
@@ -46,6 +53,7 @@ def guess_netlist_type(netlist_in: Union[Path, str]) -> DesignOutput:
                 return DesignOutput.SPECTRE
             if line.startswith('.subckt') or line.startswith('.SUBCKT'):
                 return DesignOutput.CDL
+            # TODO: NGSPICE?
 
     raise ValueError(f'Cannot guess netlist format of file {netlist_in}')
 
@@ -171,6 +179,12 @@ class Instance(NetlistNode):
 
             stream.write(wrap_string(tmp_list))
         elif netlist_type is DesignOutput.SPECTRE:
+            tmp_list = [self._inst_name]
+            tmp_list.extend(self._ports)
+            tmp_list.append(self._cell_name)
+            tmp_list.extend(self._params)
+            stream.write(wrap_string(tmp_list))
+        elif netlist_type is DesignOutput.NGSPICE:
             tmp_list = [self._inst_name]
             tmp_list.extend(self._ports)
             tmp_list.append(self._cell_name)
@@ -427,6 +441,8 @@ class ParserSpectre(Parser):
         cell_name = tokens[end_idx]
         params = tokens[end_idx+1:]
         return Instance(inst_name, cell_name, ports, params)
+
+# TODO ParserNGspice
 
 
 def _read_lines(netlist: Path) -> List[str]:
