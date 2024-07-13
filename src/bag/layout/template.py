@@ -2669,7 +2669,7 @@ class TemplateBase(DesignMaster):
                       vdd_warrs: Optional[Union[WireArray, List[WireArray]]] = None,
                       vss_warrs: Optional[Union[WireArray, List[WireArray]]] = None, bound_box: Optional[BBox] = None,
                       x_margin: int = 0, y_margin: int = 0, sup_type: str = 'both', flip: bool = False,
-                      uniform_grid: bool = False) -> Tuple[List[WireArray], List[WireArray]]:
+                      uniform_grid: bool = False, touch_edge: bool = True) -> Tuple[List[WireArray], List[WireArray]]:
         """Draw power fill on the given layer. Wrapper around do_multi_power_fill method
         that only returns the VDD and VSS wires.
 
@@ -2695,6 +2695,8 @@ class TemplateBase(DesignMaster):
             draw power fill on a common grid instead of dense packing.
         flip : bool
             true to reverse order of power fill. Default (False) is {VDD, VSS}.
+        touch_edge : bool
+            true to draw power fill to the edge of the bounding box. false to keep a margin of the preset value of track space width. Default is True.
 
         Returns
         -------
@@ -2719,7 +2721,7 @@ class TemplateBase(DesignMaster):
 
         # Run the actual power fill using the multi_power_fill function
         ret_warrs = self.do_multi_power_fill(layer_id, tr_manager, top_lists, bound_box,
-                                             x_margin, y_margin, flip, uniform_grid)
+                                             x_margin, y_margin, flip, uniform_grid, touch_edge)
 
         # Reorganize return values
         if sup_type.lower() == 'both':
@@ -2736,7 +2738,7 @@ class TemplateBase(DesignMaster):
     def do_multi_power_fill(self, layer_id: int, tr_manager: TrackManager,
                             sup_list: List[Union[WireArray, List[WireArray]]], bound_box: Optional[BBox] = None,
                             x_margin: int = 0, y_margin: int = 0, flip: bool = False, uniform_grid: bool = False
-                            ) -> List[List[WireArray]]:
+                            , touch_edge: bool = True) -> List[List[WireArray]]:
         """Draw power fill on the given layer. Accepts as many different supply nets as provided.
 
         Parameters
@@ -2757,6 +2759,8 @@ class TemplateBase(DesignMaster):
             draw power fill on a common grid instead of dense packing.
         flip : bool
             true to reverse order of power fill. Default is False.
+        touch_edge : bool
+            true to draw power fill to the edge of the bounding box. false to keep a margin of the preset value of track space width. Default is True.
 
         Returns
         -------
@@ -2782,8 +2786,12 @@ class TemplateBase(DesignMaster):
             cl, cu = bound_box.xl + fill_w2, bound_box.xh - fill_w2
             lower, upper = bound_box.yl, bound_box.yh
         sep_margin = tr_manager.get_sep(layer_id, ('sup', ''))
-        tr_bot = self.grid.coord_to_track(layer_id, cl, mode=RoundMode.GREATER_EQ)
-        tr_top = self.grid.coord_to_track(layer_id, cu, mode=RoundMode.LESS_EQ)
+        if touch_edge:
+            tr_bot = self.grid.coord_to_track(layer_id, cl, mode=RoundMode.GREATER_EQ)
+            tr_top = self.grid.coord_to_track(layer_id, cu, mode=RoundMode.LESS_EQ)
+        else:
+            tr_bot = self.grid.coord_to_track(layer_id, cl, mode=RoundMode.GREATER) + sep_margin
+            tr_top = self.grid.coord_to_track(layer_id, cu, mode=RoundMode.LESS_EQ) - sep_margin
         trs = self.get_available_tracks(layer_id, tid_lo=tr_bot, tid_hi=tr_top, lower=lower, upper=upper,
                                         width=fill_width, sep=fill_space, sep_margin=sep_margin,
                                         uniform_grid=uniform_grid)
