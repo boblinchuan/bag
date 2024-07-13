@@ -2666,7 +2666,8 @@ class TemplateBase(DesignMaster):
             cnt += 1
 
     def do_power_fill(self, layer_id: int, tr_manager: TrackManager,
-                      vdd_warrs: Optional[Union[WireArray, List[WireArray]]] = None,
+                      vdd_warrs: Optional[Union[WireArray,
+                                                List[WireArray]]] = None,
                       vss_warrs: Optional[Union[WireArray, List[WireArray]]] = None, bound_box: Optional[BBox] = None,
                       x_margin: int = 0, y_margin: int = 0, sup_type: str = 'both', flip: bool = False,
                       uniform_grid: bool = False, touch_edge: bool = True) -> Tuple[List[WireArray], List[WireArray]]:
@@ -2705,9 +2706,11 @@ class TemplateBase(DesignMaster):
         """
         # Value checks
         if sup_type.lower() not in ['vdd', 'vss', 'both']:
-            raise ValueError('sup_type has to be "VDD" or "VSS" or "both"(default)')
+            raise ValueError(
+                'sup_type has to be "VDD" or "VSS" or "both"(default)')
         if not vdd_warrs and not vss_warrs:
-            raise ValueError('At least one of vdd_warrs or vss_warrs must be given.')
+            raise ValueError(
+                'At least one of vdd_warrs or vss_warrs must be given.')
 
         # Build supply lists based on specficiation
         if sup_type.lower() == 'both' and vdd_warrs and vss_warrs:
@@ -2717,7 +2720,8 @@ class TemplateBase(DesignMaster):
         elif sup_type.lower() == 'vdd' and vdd_warrs:
             top_lists = [vdd_warrs]
         else:
-            raise RuntimeError('Provided supply type and supply wires do not match.')
+            raise RuntimeError(
+                'Provided supply type and supply wires do not match.')
 
         # Run the actual power fill using the multi_power_fill function
         ret_warrs = self.do_multi_power_fill(layer_id, tr_manager, top_lists, bound_box,
@@ -2725,7 +2729,8 @@ class TemplateBase(DesignMaster):
 
         # Reorganize return values
         if sup_type.lower() == 'both':
-            top_vdd, top_vss = (ret_warrs[0], ret_warrs[1]) if not flip else (ret_warrs[1], ret_warrs[0])
+            top_vdd, top_vss = (ret_warrs[0], ret_warrs[1]) if not flip else (
+                ret_warrs[1], ret_warrs[0])
         elif sup_type.lower() == 'vss':
             top_vdd = []
             top_vss = ret_warrs[0]
@@ -2798,10 +2803,13 @@ class TemplateBase(DesignMaster):
         all_warrs = [[] for _ in range(num_sups)]
         htr_sep = HalfInt.convert(fill_space).dbl_value
         if len(trs) < num_sups:
-            raise ValueError('Not enough available tracks to fill for all provided supplies')
+            raise ValueError(
+                'Not enough available tracks to fill for all provided supplies')
         for ncur, tr_idx in enumerate(trs):
-            warr = self.add_wires(layer_id, tr_idx, lower, upper, width=fill_width)
-            _ncur = HalfInt.convert(tr_idx).dbl_value // htr_sep if uniform_grid else ncur
+            warr = self.add_wires(layer_id, tr_idx, lower,
+                                  upper, width=fill_width)
+            _ncur = HalfInt.convert(
+                tr_idx).dbl_value // htr_sep if uniform_grid else ncur
             if not flip:
                 all_warrs[_ncur % num_sups].append(warr)
             else:
