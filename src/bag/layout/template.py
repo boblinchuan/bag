@@ -2782,7 +2782,7 @@ class TemplateBase(DesignMaster):
             cl, cu = bound_box.xl + fill_w2, bound_box.xh - fill_w2
             lower, upper = bound_box.yl, bound_box.yh
         sep_margin = tr_manager.get_sep(layer_id, ('sup', ''))
-        tr_bot = self.grid.coord_to_track(layer_id, cl, mode=RoundMode.GREATER_EQ)
+        tr_bot = self.grid.coord_to_track(layer_id, cl, mode=RoundMode.GREATER)
         tr_top = self.grid.coord_to_track(layer_id, cu, mode=RoundMode.LESS_EQ)
         trs = self.get_available_tracks(layer_id, tid_lo=tr_bot, tid_hi=tr_top, lower=lower, upper=upper,
                                         width=fill_width, sep=fill_space, sep_margin=sep_margin,
