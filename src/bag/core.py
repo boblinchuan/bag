@@ -517,6 +517,8 @@ class BagProject:
         gen_sch = (gen_sch or gen_hier or gen_model or run_lvs or run_rcx) and has_sch
         flat = flat or (mismatch and not run_rcx)
 
+        # Export CDL, assuming that this will be for LVS or similar.
+        # TODO: add input key to control final_netlist_type
         final_netlist = ''
         final_netlist_type = DesignOutput.CDL
         lvs_netlist = ''
@@ -525,7 +527,7 @@ class BagProject:
             if sim_netlist:
                 ext = self._sim.netlist_type.extension
             else:
-                ext = DesignOutput.CDL.extension
+                ext = final_netlist_type.extension
             netlist_file = str(root_path / f'{impl_cell}.{ext}')
 
         if gen_sch:
@@ -570,7 +572,6 @@ class BagProject:
                                                fname=netlist_file, cv_info_out=cv_info_out,
                                                flat=flat, exact_cell_names=exact_cell_names)
                 else:
-                    final_netlist_type = DesignOutput.CDL
                     lvs_netlist = netlist_file
                     sch_db.batch_schematic(dut_list, output=final_netlist_type, fname=netlist_file,
                                            cv_info_out=cv_info_out, flat=flat,
@@ -578,6 +579,7 @@ class BagProject:
                                            square_bracket=square_bracket)
                 t1 = time.perf_counter()
                 print(f'netlisting done: time taken = {t1 - t0}')
+                print(f"wrote netlist to: {netlist_file}")
 
             if verilog_shell_path is not None:
                 sch_db.batch_schematic(dut_list, output=DesignOutput.VERILOG, shell=True,

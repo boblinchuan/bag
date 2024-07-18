@@ -389,6 +389,8 @@ netlist_map_default = {
                 'num': [3, ''],
                 'r': [3, ''],
                 'srcType': [3, 'sine'],
+                'acm': [3, ''],
+                'vdc': [3, ''],
             }
         },
         'res': {
@@ -551,6 +553,39 @@ netlist_map_default = {
             'va': '${CDSHOME}/tools/dfII/samples/artist/ahdlLib/rand_bit_stream/veriloga/veriloga.va',
         },
     },
+    'ngspice': {
+        # Wrapping the TRNOISE source in Ngspice
+        'vtrnoise': {
+            'lib_name': 'ngspice',
+            'cell_name': 'vtrnoise',
+            'in_terms': [],
+            'io_terms': ['PLUS', 'MINUS'],
+            'is_prim': True,
+            'nets': [],
+            'out_terms': [],
+            'props': {
+                'na': [3, 0],
+                'nt': [3, 0],
+                'nalpha': [3, 0],
+                'namp': [3, 0],
+            }
+        },
+        'itrnoise': {
+            'lib_name': 'ngspice',
+            'cell_name': 'itrnoise',
+            'in_terms': [],
+            'io_terms': ['PLUS', 'MINUS'],
+            'is_prim': True,
+            'nets': [],
+            'out_terms': [],
+            'props': {
+                'na': [3, 0],
+                'nt': [3, 0],
+                'nalpha': [3, 0],
+                'namp': [3, 0],
+            }
+        }
+    }
 }
 
 mos_default = {
@@ -683,6 +718,49 @@ mim_cdl_fmt = """.SUBCKT {{ cell_name }} BOT TOP
 .ENDS
 """
 
+# Cir -> Ngspice
+mos_cir_fmt = """.SUBCKT {{ cell_name }} B D G S
+.param  l=1 w=1 nf=1
+{{ prefix }}M0 D G S B {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+.ENDS
+"""
+
+mos3_cir_fmt = """.SUBCKT {{ cell_name }} D G S
+.param  l=1 w=1 nf=1
+{{ prefix }}M0 D G S {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+.ENDS
+"""
+
+dio_cir_fmt = """.SUBCKT {{ cell_name }}{% if ports|length == 3 %} GUARD_RING{% endif %} MINUS PLUS
+.param  l=1 w=1
+{{ prefix }}D0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+.ENDS
+"""
+
+dio_cir_fmt_static = """.SUBCKT {{ cell_name }}{% if ports|length == 3 %} GUARD_RING{% endif %} MINUS PLUS
+{{ prefix }}D0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}
+.ENDS
+"""
+
+res_metal_cir_fmt = """.SUBCKT {{ cell_name }} MINUS PLUS
+.param  l=1 w=1
+{{ prefix }}R0 PLUS MINUS {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+.ENDS
+"""
+
+res_cir_fmt = """.SUBCKT {{ cell_name }}{% if num_ports == 3 %} BULK{% endif %} MINUS PLUS
+.param  l=1 w=1
+{{ prefix }}R0 PLUS MINUS{% if num_ports == 3 %} BULK{% endif %} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+.ENDS
+"""
+
+mim_cir_fmt = """.SUBCKT {{ cell_name }} BOT TOP
+.param  unit_width=1 unit_height=1 num_rows=1 num_cols=1
+{{ prefix }}C0 TOP BOT {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+.ENDS
+"""
+
+# Spectre
 mos_spectre_fmt = """subckt {{ cell_name }} B D G S
 parameters l w nf
 {{ prefix }}M0 D G S B {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
@@ -747,6 +825,14 @@ scs_ideal_balun = """subckt ideal_balun d c p n
 ends ideal_balun
 """
 
+cir_ideal_balun = """.subckt ideal_balun d c p n
+    K0 d 0 p c primary
+    .model primary lcouple (num_turns=2)
+    K1 d 0 c n secondary
+    .model secondary lcouple (num_turns=2)
+.ends ideal_balun
+"""
+
 supported_formats = {
     DesignOutput.CDL: {
         'fname': 'bag_prim.cdl',
@@ -767,6 +853,16 @@ supported_formats = {
         'res_metal': 'res_metal_scs',
         'res': 'res_scs',
         'mim': 'mim_scs',
+    },
+    DesignOutput.NGSPICE: {
+        'fname': 'bag_prim.cir',
+        'mos': 'mos_cir',
+        'mos3': 'mos3_cir',
+        'diode': 'diode_cir',
+        'diode_static': 'diode_cir_static',
+        'res_metal': 'res_metal_cir',
+        'res': 'res_cir',
+        'mim': 'mim_cir',
     },
     DesignOutput.VERILOG: {
         'fname': 'bag_prim.v',
@@ -796,35 +892,49 @@ jinja_env = Environment(
          'mos3_cdl': mos3_cdl_fmt,
          'mos_scs': mos_spectre_fmt,
          'mos3_scs': mos3_spectre_fmt,
+         'mos_cir': mos_cir_fmt,
+         'mos3_cir': mos3_cir_fmt,
          'mos_verilog': mos_verilog_fmt,
          'diode_cdl': dio_cdl_fmt,
          'diode_scs': dio_spectre_fmt,
+         'diode_cir': dio_cir_fmt,
          'diode_cdl_static': dio_cdl_fmt_static,
          'diode_scs_static': dio_spectre_fmt_static,
+         'diode_cir_static': dio_cir_fmt_static,
          'res_metal_cdl': res_metal_cdl_fmt,
          'res_metal_scs': res_metal_spectre_fmt,
+         'res_metal_cir': res_metal_cir_fmt,
          'res_cdl': res_cdl_fmt,
          'res_scs': res_spectre_fmt,
+         'res_cir': res_cir_fmt,
          'mim_cdl': mim_cdl_fmt,
-         'mim_scs': mim_spectre_fmt}),
+         'mim_scs': mim_spectre_fmt,
+         'mim_cir': mim_cir_fmt}),
     keep_trailing_newline=True,
 )
 
 prefix_dict = {
     'mos_cdl': 'M',
     'mos3_cdl': 'M',
+    'mos3_cir': 'M',
     'mos_scs': 'M',
     'mos3_scs': 'M',
+    'mos3_cir': 'M',
     'diode_cdl': 'X',
     'diode_scs': 'X',
+    'diode_cir': 'X',
     'diode_cdl_static': 'X',
     'diode_scs_static': 'X',
+    'diode_cir_static': 'X',
     'res_metal_cdl': 'R',
     'res_metal_scs': 'R',
+    'res_metal_cir': 'R',
     'res_cdl': 'R',
     'res_scs': 'R',
+    'res_cir': 'R',
     'mim_cdl': 'C',
     'mim_scs': 'C',
+    'mim_cir': 'C',
 }
 
 
@@ -989,7 +1099,7 @@ def _get_model_name(model_name: Union[str, Dict[str, str]], key: str) -> str:
 
 
 def _get_prefix(config: Dict[str, Any], key: DesignOutput, template_name: str) -> str:
-    if key is DesignOutput.CDL or key is DesignOutput.SPECTRE:
+    if key.is_netlist:
         prefix = config.get('prefix')
         if prefix and key.name in prefix:
             return prefix[key.name]
@@ -998,9 +1108,14 @@ def _get_prefix(config: Dict[str, Any], key: DesignOutput, template_name: str) -
 
 
 def populate_custom_cells(inc_lines: Dict[DesignOutput, List[str]]):
+    # Add balun models
     scs_lines = inc_lines[DesignOutput.SPECTRE]
     scs_lines.append('\n')
     scs_lines.append(scs_ideal_balun)
+
+    cir_lines = inc_lines[DesignOutput.NGSPICE]
+    cir_lines.append('\n')
+    cir_lines.append(cir_ideal_balun)
 
 
 def get_info(config: Dict[str, Any], output_dir: Path
