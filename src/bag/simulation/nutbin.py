@@ -39,9 +39,30 @@ from .data import AnalysisData, SimData, _check_is_md, combine_ana_sim_envs
 
 
 class NutBinParser:
-    def __init__(self, raw_path: Path, rtol: float, atol: float, monte_carlo: bool) -> None:
+    """A class for parsing NutBin results.
+
+    Parameters
+    ----------
+    raw_path : Path
+        working directory path.
+    rtol : float
+        relative tolerance.
+    atol : float
+        absolute tolerance.
+    monte_carlo : bool
+        True if a monte_carlo simulation.
+    parse_title : bool
+        If True, try to parse the simulation from the title. Else, parse from the plotname.
+    byte_order: str
+        Byte order of Nutbin file. See `np.dtype.newbyteorder` for details. Defaults to big endian.
+
+    """
+    def __init__(self, raw_path: Path, rtol: float, atol: float, monte_carlo: bool,
+                 parse_title: bool = False, byte_order: str = '>') -> None:
         self._cwd_path = raw_path.parent
         self._monte_carlo = monte_carlo
+        self._parse_title = parse_title
+        self._byte_order = byte_order
         nb_data = self.parse_raw_file(raw_path)
         self._sim_data = self.convert_to_sim_data(nb_data, rtol, atol)
 
@@ -55,7 +76,7 @@ class NutBinParser:
 
     def parse_raw_file(self, raw_path: Path) -> Mapping[str, Any]:
         with open(raw_path, 'rb') as f:
-            f.readline()    # skip title
+            title = f.readline().decode('ascii')
             f.readline()    # skip date
 
             # read all the individual analyses
@@ -66,13 +87,19 @@ class NutBinParser:
                 if len(plotname) == 0:  # EOF
                     break
                 data = self.parse_analysis(f)
-                self.populate_dict(ana_dict, plotname, raw_path, data)
+                if self._parse_title:
+                    self.populate_dict(ana_dict, title, raw_path, data)
+                else:
+                    self.populate_dict(ana_dict, plotname, raw_path, data)
         return ana_dict
 
-    @staticmethod
-    def parse_analysis(f: BinaryIO) -> Dict[str, Union[np.ndarray, float]]:
+    def parse_analysis(self, f: BinaryIO) -> Dict[str, Union[np.ndarray, float]]:
         # read flags
-        flags = f.readline().decode('ascii').split()
+        flags = f.readline().decode('ascii')
+        # Edge cases: If date and plotname are written again:
+        while flags.startswith("Date") or flags.startswith("Plotname"):
+            flags = f.readline().decode('ascii')
+        flags = flags.split()
         if flags[1] == 'real':
             nptype = float
         elif flags[1] == 'complex':
@@ -85,6 +112,7 @@ class NutBinParser:
         # TODO: hack for an example case where '\n' goes missing after the next line
         points_line = f.readline().decode('ascii').split()
         if points_line[-1].isdigit():
+            # Format: No. Points: ###
             num_points = int(points_line[-1])
             next_line = None
         else:
@@ -99,14 +127,17 @@ class NutBinParser:
                 _line = next_line
             else:
                 _line = f.readline().decode('ascii').split()
-            if idx == 0:
+            # Edge case: Variables: \n
+            if len(_line) == 1:
+                _line = f.readline().decode('ascii').split()
+            if 'Variables' in _line[0]:
                 var_names.append(_line[2])
             else:
                 var_names.append(_line[1])
 
         f.readline()    # skip "Binary:"
-        # read big endian binary data
-        bin_data = np.fromfile(f, dtype=np.dtype(nptype).newbyteorder(">"), count=num_vars * num_points)
+        # read binary data
+        bin_data = np.fromfile(f, dtype=np.dtype(nptype).newbyteorder(self._byte_order), count=num_vars * num_points)
         data = {}
         if 'dummy' in var_names and num_points == 1:
             # single sim with no inner sweep
@@ -117,7 +148,7 @@ class NutBinParser:
             if var_name == 'dummy':
                 # skip dummy variable
                 continue
-            if var_name == 'freq':
+            if var_name == 'freq' or var_name == 'frequency':
                 # convert frequency data to real
                 _sig = np.real(bin_data[idx::num_vars])
             else:
@@ -125,12 +156,32 @@ class NutBinParser:
             if not inner_sweep:
                 # no inner sweep, store singular value
                 _sig = _sig[0]
+
+            # Conversion features for inter-simulator compatibility
+            if 'freq' in var_name or 'time' in var_name:
+                _sig = _sig.flatten()
+            if var_name.startswith('v('):
+                # Compatibility for naming; v(name) -> name
+                var_name = var_name[2:-1]
+            if var_name.endswith('#branch'):
+                # Compatibility for current probes; inst:term#branch -> inst:term
+                var_name = var_name[:-7]
+            if var_name.endswith(':power'):
+                # Compatibility for power probes; inst:power -> inst:pwr
+                var_name = var_name[:-5] + "pwr"
+            if var_name == 'frequency':
+                # Compatibility for inner sweep
+                data['freq'] = np.copy(_sig)
             data[var_name] = _sig
 
         return data
 
     @staticmethod
     def get_info_from_plotname(plotname: str) -> Mapping[str, Any]:
+        """Expected Format:
+            Plotname: <description> `<ana_name>': <sweep description>
+        """
+
         # get ana_name from plotname
         ana_name = re.search('`.*\'', plotname).group(0)[1:-1]
 
@@ -197,6 +248,9 @@ class NutBinParser:
             ana_dict[ana_type][sim_env] = {'data': [], 'swp_combos': [], 'inner_sweep': inner_sweep,
                                            'swp_vars': swp_vars, 'swp_data': swp_data, 'ana_name': []}
 
+        # Handle sims with multiple groups or plots of results. Known cases:
+        # 1) Spectre PSS reports td, fd, and tran
+        # 2) Ngspice noise reports o/inoise_spectrum and o/inoise_totals
         if ana_name in ana_dict[ana_type][sim_env]['ana_name']:
             if ana_type == 'pss_td':
                 # In PSS simulations with saveinit=yes, the only way to detect the difference between the initial
@@ -219,11 +273,32 @@ class NutBinParser:
                 ana_dict[prev_ana_type][sim_env]['ana_name'].append(ana_dict[ana_type][sim_env]['ana_name'].pop())
                 if swp_combo:
                     ana_dict[prev_ana_type][sim_env]['swp_combos'].append(ana_dict[ana_type][sim_env]['swp_combos'].pop())
+            elif ana_type == 'noise':
+                # Ngspice noise reports noise_spectrum and then noise_totals
+                # We will add it to the existing results
+                idx = ana_dict[ana_type][sim_env]['ana_name'].index(ana_name)
+                existing_data = ana_dict[ana_type][sim_env]['data'][idx]
+                # Check that we are not overwriting any keys
+                for key in data:
+                    assert key not in existing_data, \
+                        "Error: Ngspice results has overlapping ana_type with overlapping keys, causing overwrite."
+                existing_data.update(data)
+                if swp_combo:
+                    # TODO
+                    raise NotImplementedError('Ngspice multiple sweeps not implemented; see developer.')    
+                return
             else:
-                raise NotImplementedError('This should not be possible; see developer.')
+                raise NotImplementedError('Unknown case for parsing multiple simulation outputs; see developer.')
 
+        # Append any new results, usually new sim sweep points or a single sim point
         ana_dict[ana_type][sim_env]['data'].append(data)
         ana_dict[ana_type][sim_env]['ana_name'].append(ana_name)
+
+        # Adding a key for inter-simulator compatibility
+        if ana_type == 'noise':
+            if 'onoise_spectrum' in data and 'out' not in data:
+                ana_dict[ana_type][sim_env]['data'][-1]['out'] = data['onoise_spectrum'].copy()
+
         # get outer sweep combo, if any
         if swp_combo:
             swp_combo_val = []
@@ -242,6 +317,7 @@ class NutBinParser:
             for sim_env, nb_dict in sim_env_dict.items():
                 sub_ana_dict[sim_env] = self.convert_to_analysis_data(nb_dict, rtol, atol, ana_type)
             ana_dict[ana_type] = combine_ana_sim_envs(sub_ana_dict, sim_envs)
+        # TODO: The rest of BAG is built for Spectre, so this follows convention
         return SimData(sim_envs, ana_dict, DesignOutput.SPECTRE)
 
     def convert_to_analysis_data(self, nb_dict: Mapping[str, Any], rtol: float, atol: float, ana_type: str
@@ -309,6 +385,17 @@ class NutBinParser:
             raise NotImplementedError("Parametric sweeps must be formatted multi-dimensionally")
         data.update(swp_combo)
 
+        def _sp_parser(sig_name) -> str:
+            # For SP, parse the name and reformat in the known convention
+            if sig_name == 'frequency':
+                return 'freq'
+            reg = re.search('[SYZsyz]_\d_\d', sig_name)
+            if not reg:
+                return sig_name
+            parts = reg.group(0).split("_")
+            new_name = ''.join(parts).lower()
+            return new_name
+
         # parse each signal
         if swp_len == 0:    # no outer sweep
             for sig_name, sig_y in nb_dict['data'][0].items():
@@ -317,6 +404,8 @@ class NutBinParser:
                 else:
                     data_shape = (*swp_shape, sig_y.shape[-1])
                 _new_sig = sig_name.replace('/', '.')
+                if ana_type == 'sp':
+                    _new_sig = _sp_parser(_new_sig)
                 data[_new_sig] = sig_y if _new_sig == inner_sweep else np.reshape(sig_y, data_shape)
         else:   # combine outer sweeps
             sig_names = list(nb_dict['data'][0].keys())
@@ -333,6 +422,8 @@ class NutBinParser:
                     is_same_len = all((sub_dims[i] == sub_dims[0] for i in range(swp_len)))
                     data_shape = (*swp_shape, max_dim)
                 _new_sig = sig_name.replace('/', '.')
+                if ana_type == 'sp':
+                    _new_sig = _sp_parser(_new_sig)
                 if not is_same_len:
                     yvecs_padded = [np.pad(yvec, (0, max_dim - dim), constant_values=np.nan)
                                     for yvec, dim in zip(yvecs, sub_dims)]

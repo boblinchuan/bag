@@ -53,6 +53,7 @@ import os
 import shutil
 import pprint
 from pathlib import Path
+import time
 
 from pybag.enum import DesignOutput, SupplyWrapMode, LogLevel
 from pybag.core import PySchCellViewInfo
@@ -60,6 +61,7 @@ from pybag.core import PySchCellViewInfo
 from .io.file import write_yaml, read_yaml
 from .interface import ZMQDealer
 from .interface.lef import LEFInterface
+from .interface.oa import OAInterface
 from .design.netlist import add_mismatch_offsets
 from .design.database import ModuleDB
 from .design.module import Module
@@ -469,40 +471,33 @@ class BagProject:
 
             if gen_lay:
                 print('creating layout...')
-                if not raw:
-                    lay_db.batch_layout(dut_list, output=DesignOutput.LAYOUT,
-                                        exact_cell_names=exact_cell_names)
-                else:
-                    layout_file = (layout_file_override or
-                                   str(root_path / f'{impl_cell}.{layout_ext}'))
-                    lay_db.batch_layout(dut_list, output=lay_type_list[0], fname=layout_file,
+                t0 = time.perf_counter()
+                # always create gds first
+                layout_file = (layout_file_override or
+                               str(root_path / f'{impl_cell}.{layout_ext}'))
+                lay_db.batch_layout(dut_list, output=lay_type_list[0], fname=layout_file,
+                                    exact_cell_names=exact_cell_names,
+                                    square_bracket=square_bracket)
+                for out_type in lay_type_list[1:]:
+                    cur_file = str(root_path / f'{impl_cell}.{out_type.extension}')
+                    lay_db.batch_layout(dut_list, output=out_type, fname=cur_file,
                                         exact_cell_names=exact_cell_names,
                                         square_bracket=square_bracket)
-                    for out_type in lay_type_list[1:]:
-                        cur_file = str(root_path / f'{impl_cell}.{out_type.extension}')
-                        lay_db.batch_layout(dut_list, output=out_type, fname=cur_file,
-                                            exact_cell_names=exact_cell_names,
-                                            square_bracket=square_bracket)
+                if not raw:
+                    # Create layout view in Virtuoso
+                    if isinstance(self.impl_db, OAInterface):
+                        lay_db.batch_layout(dut_list, output=DesignOutput.LAYOUT,
+                                            exact_cell_names=exact_cell_names)
+                    else:
+                        self.import_layout(layout_file, impl_lib,
+                                           f'{name_prefix}{impl_cell}{name_suffix}')
 
-                print('layout done.')
+                t1 = time.perf_counter()
+                print(f'layout done: time taken = {t1 - t0}')
 
             sch_params = lay_master.sch_params
         else:
             sch_params = params
-
-        if export_lay and not raw:
-            print('exporting layout')
-            layout_file = (layout_file_override or
-                           str(root_path / f'{impl_cell}.{layout_ext}'))
-            export_params = dict(square_bracket=square_bracket,
-                                 output_type=lay_type_list[0])
-            self.impl_db.export_layout(impl_lib, impl_cell, layout_file,
-                                       params=export_params)
-            for out_type in lay_type_list[1:]:
-                export_params['output_type'] = out_type
-                cur_file = str(root_path / f'{impl_cell}.{out_type.extension}')
-                self.impl_db.export_layout(impl_lib, impl_cell, cur_file,
-                                           params=export_params)
 
         has_sch = sch_cls is not None
 
@@ -511,6 +506,8 @@ class BagProject:
         gen_sch = (gen_sch or gen_hier or gen_model or run_lvs or run_rcx) and has_sch
         flat = flat or (mismatch and not run_rcx)
 
+        # Export CDL, assuming that this will be for LVS or similar.
+        # TODO: add input key to control final_netlist_type
         final_netlist = ''
         final_netlist_type = DesignOutput.CDL
         lvs_netlist = ''
@@ -519,7 +516,7 @@ class BagProject:
             if sim_netlist:
                 ext = self._sim.netlist_type.extension
             else:
-                ext = DesignOutput.CDL.extension
+                ext = final_netlist_type.extension
             netlist_file = str(root_path / f'{impl_cell}.{ext}')
 
         if gen_sch:
@@ -535,8 +532,10 @@ class BagProject:
 
             if not raw:
                 print('creating schematic...')
+                t0 = time.perf_counter()
                 sch_db.batch_schematic(dut_list, exact_cell_names=exact_cell_names)
-                print('schematic done.')
+                t1 = time.perf_counter()
+                print(f'schematic done: time taken = {t1 - t0}')
 
             if yaml_file:
                 sch_db.batch_schematic(dut_list, output=DesignOutput.YAML, fname=yaml_file,
@@ -544,6 +543,7 @@ class BagProject:
 
             if netlist_file:
                 print('creating netlist...')
+                t0 = time.perf_counter()
                 final_netlist = netlist_file
                 if sim_netlist:
                     final_netlist_type = self._sim.netlist_type
@@ -561,13 +561,14 @@ class BagProject:
                                                fname=netlist_file, cv_info_out=cv_info_out,
                                                flat=flat, exact_cell_names=exact_cell_names)
                 else:
-                    final_netlist_type = DesignOutput.CDL
                     lvs_netlist = netlist_file
                     sch_db.batch_schematic(dut_list, output=final_netlist_type, fname=netlist_file,
                                            cv_info_out=cv_info_out, flat=flat,
                                            exact_cell_names=exact_cell_names,
                                            square_bracket=square_bracket)
-                print('netlisting done.')
+                t1 = time.perf_counter()
+                print(f'netlisting done: time taken = {t1 - t0}')
+                print(f"wrote netlist to: {netlist_file}")
 
             if verilog_shell_path is not None:
                 sch_db.batch_schematic(dut_list, output=DesignOutput.VERILOG, shell=True,
@@ -596,8 +597,9 @@ class BagProject:
             if sim_netlist:
                 raise ValueError('Cannot generate simulation netlist from custom cellview')
 
-            print('exporting netlist')
-            self.impl_db.export_schematic(impl_lib, impl_cell, netlist_file)
+            if not raw:
+                print('exporting netlist from custom cellview')
+                self.impl_db.export_schematic(impl_lib, impl_cell, netlist_file)
 
         if impl_cell in exact_cell_names:
             gen_cell_name = impl_cell
@@ -675,7 +677,7 @@ class BagProject:
             if extract_type:
                 rcx_params['extract_type'] = extract_type
                 _suf += f'_{extract_type}'
-            if extract_type:
+            if extract_corner:
                 rcx_params['extract_corner'] = extract_corner
                 _suf += f'_{extract_corner}'
             final_netlist, rcx_log = self.run_rcx(lib_name, cell_name, params=rcx_params)

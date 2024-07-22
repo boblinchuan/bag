@@ -208,9 +208,11 @@ class DesignerBase(LoggingBase, abc.ABC):
     async def async_new_dut(self, impl_cell: str,
                             dut_cls: Union[Type[TemplateBase], Type[Module], str],
                             dut_params: Mapping[str, Any], extract: Optional[bool] = None,
+                            rcx_params: Optional[Mapping[str, Any]] = None,
                             name_prefix: str = '', name_suffix: str = '',
                             flat: bool = False, export_lay: bool = False) -> DesignInstance:
         return await self._sim_db.async_new_design(impl_cell, dut_cls, dut_params, extract=extract,
+                                                   rcx_params=rcx_params,
                                                    name_prefix=name_prefix, name_suffix=name_suffix,
                                                    flat=flat, export_lay=export_lay)
 

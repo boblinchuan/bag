@@ -64,6 +64,7 @@ from ..env import get_netlist_setup_file, get_gds_layer_map, get_gds_object_map
 from .search import get_new_name
 from .immutable import Param, to_immutable
 from .logging import LoggingBase
+from ..interface.skill import SkillInterface
 
 if TYPE_CHECKING:
     from ..core import BagProject
@@ -730,8 +731,13 @@ class MasterDB(LoggingBase, metaclass=abc.ABCMeta):
                             _tuple = (_item.cell_name, _item)
                             if _tuple not in content_list:
                                 content_list.append(_tuple)
-            content_list.append(master.get_content(output, rename, prefix, suffix, shell,
-                                                   exact_cell_names, supply_wrap_mode))
+            if output is DesignOutput.SCHEMATIC and isinstance(self._prj.impl_db, SkillInterface):
+                # Edge case for exporting schematics through SKILL
+                content_list.append(master.get_content_skill(output, rename, prefix, suffix, shell,
+                                                             exact_cell_names, supply_wrap_mode))
+            else:
+                content_list.append(master.get_content(output, rename, prefix, suffix, shell,
+                                                       exact_cell_names, supply_wrap_mode))
 
         if debug:
             print(f'master content retrieval took {end - start:.4g} seconds')

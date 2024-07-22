@@ -141,6 +141,17 @@ class LibPSFParser:
         else:
             harmonic = None
 
+        # For PNoise, get pm index if it exists
+        if ana_type == 'pnoise':
+            pm_fmt = 'pm[0-9]+'
+            m1 = re.search(pm_fmt, ana_name)
+            pm_name = m1.group(0)
+            suf1 = suf.split('.')[0]
+            if suf1.isdigit():
+                pm_name += f'.{suf1}'
+        else:
+            pm_name = None
+
         # get outer sweep information from ana_name, if any
         m_swp = re.findall('swp[0-9]{2}', ana_name)
         m_swp1 = re.findall('swp[0-9]{2}-[0-9]{3}', ana_name)
@@ -155,6 +166,7 @@ class LibPSFParser:
             swp_info=m_swp,
             swp_key='_'.join(key_list),
             harmonic=harmonic,
+            pm_name=pm_name,
         )
 
     def populate_dict(self, ana_dict: Dict[str, Any], info: Mapping[str, Any], raw_path: Path,
@@ -164,6 +176,19 @@ class LibPSFParser:
         swp_key: str = info['swp_key']
         swp_info: Sequence[str] = info['swp_info']
         harmonic: Optional[int] = info['harmonic']
+        pm_name: Optional[str] = info['pm_name']
+        if pm_name:
+            if '.' in pm_name:
+                pm_base, pm_idx = pm_name.split('.')
+                pm_idx = int(pm_idx)
+                if pm_idx != 0:
+                    # Need extra dimension in data storage
+                    raise NotImplementedError('Contact developer.')
+            else:
+                pm_base = pm_name
+            pm_base_idx = int(re.search('[0-9]+', pm_base).group(0))
+        else:
+            pm_base_idx = None
         inner_sweep: str = info['inner_sweep']
 
         if ana_type not in ana_dict:
@@ -174,12 +199,13 @@ class LibPSFParser:
             swp_vars, swp_data = parse_sweep_info(swp_info, raw_path, ana_type, sim_env, offset=16)
             ana_dict[ana_type][sim_env] = {
                 'inner_sweep': inner_sweep,
-                'outer_sweep': swp_key is not '',
+                'outer_sweep': swp_key != '',
                 'harmonics': harmonic is not None,
+                'pms': pm_name is not None,
                 'swp_vars': swp_vars,
                 'swp_data': swp_data,
             }
-            if swp_key or (harmonic is not None):
+            if swp_key or (harmonic is not None) or (pm_name is not None):
                 ana_dict[ana_type][sim_env]['data'] = {}
 
         if self._num_proc > 1 and int(raw_path.name) > 1 and (ana_type, sim_env) not in at_se_check:
@@ -191,17 +217,28 @@ class LibPSFParser:
                 ana_dict[ana_type][sim_env]['swp_data'][_key] = np.concatenate((_val_ini, _val))
             at_se_check.append((ana_type, sim_env))
 
-        # PAC harmonics are handled separately from parametric sweep
+        # PAC harmonics and PM jitter are handled separately from parametric sweep
         if swp_key:
-            if harmonic is not None:
+            if harmonic is not None or pm_name is not None:
                 if swp_key not in ana_dict[ana_type][sim_env]['data']:
                     ana_dict[ana_type][sim_env]['data'][swp_key] = {}
-                ana_dict[ana_type][sim_env]['data'][swp_key][harmonic] = data
+                if harmonic is not None:
+                    ana_dict[ana_type][sim_env]['data'][swp_key][harmonic] = data
+                else:   # if pm_name is not None:
+                    if pm_base_idx not in ana_dict[ana_type][sim_env]['data'][swp_key]:
+                        ana_dict[ana_type][sim_env]['data'][swp_key][pm_base_idx] = data
+                    else:
+                        ana_dict[ana_type][sim_env]['data'][swp_key][pm_base_idx].update(data)
             else:
                 ana_dict[ana_type][sim_env]['data'][swp_key] = data
         else:
             if harmonic is not None:
                 ana_dict[ana_type][sim_env]['data'][harmonic] = data
+            elif pm_name is not None:
+                if pm_base_idx not in ana_dict[ana_type][sim_env]['data']:
+                    ana_dict[ana_type][sim_env]['data'][pm_base_idx] = data
+                else:
+                    ana_dict[ana_type][sim_env]['data'][pm_base_idx].update(data)
             else:
                 ana_dict[ana_type][sim_env]['data'] = data
 
@@ -223,6 +260,7 @@ class LibPSFParser:
         inner_sweep: str = lp_dict['inner_sweep']
         outer_sweep: bool = lp_dict['outer_sweep']
         harmonics: bool = lp_dict['harmonics']
+        pms: bool = lp_dict['pms']
         swp_vars = lp_dict['swp_vars']
         swp_data = lp_dict['swp_data']
         lp_data = lp_dict['data']
@@ -237,6 +275,8 @@ class LibPSFParser:
             num_swp = len(swp_combos[0])
 
             if harmonics:
+                pm_swp = []
+
                 swp_vars.append('harmonic')
                 new_swp_combos = []
                 harm_swp = sorted(lp_data[swp_keys[0]].keys())
@@ -245,20 +285,42 @@ class LibPSFParser:
                         new_swp_combos.append(swp_combo + [_harm])
                 swp_combos = new_swp_combos
                 num_swp += 1
+            elif pms:
+                harm_swp = []
+
+                swp_vars.append('pm')
+                new_swp_combos = []
+                pm_swp = sorted(lp_data[swp_keys[0]].keys())
+                for swp_combo in swp_combos:
+                    for _pm in pm_swp:
+                        new_swp_combos.append(swp_combo + [_pm])
+                swp_combos = new_swp_combos
+                num_swp += 1
             else:
                 harm_swp = []
+                pm_swp = []
 
             swp_len = len(swp_combos)
             swp_combo_list = [np.array(swp_combos)[:, i] for i in range(num_swp)]
         else:
             swp_keys = []
             if harmonics:
+                pm_swp = []
+
                 swp_vars = ['harmonic']
                 harm_swp = sorted(lp_data.keys())
                 swp_len = len(harm_swp)
                 swp_combo_list = [np.array(harm_swp)]
+            elif pms:
+                harm_swp = []
+
+                swp_vars = ['pm']
+                pm_swp = sorted(lp_data.keys())
+                swp_len = len(pm_swp)
+                swp_combo_list = [np.array(pm_swp)]
             else:
                 harm_swp = []
+                pm_swp = []
                 swp_len = 0
                 swp_combo_list = []
 
@@ -281,12 +343,12 @@ class LibPSFParser:
                 data[_new_sig] = sig_y if _new_sig == inner_sweep else np.reshape(sig_y, data_shape)
         else:   # combine outer sweeps
             if outer_sweep:
-                if harmonics:
+                if harmonics or pms:
                     sig_names = lp_data[swp_keys[0]][0].keys()
                 else:
                     sig_names = lp_data[swp_keys[0]].keys()
             else:
-                if harmonics:
+                if harmonics or pms:
                     sig_names = lp_data[0].keys()
                 else:
                     raise NotImplementedError('Not possible.')
@@ -295,11 +357,15 @@ class LibPSFParser:
                 if outer_sweep:
                     if harmonics:
                         yvecs = [lp_data[key0][key1][sig_name] for key1 in harm_swp for key0 in swp_keys]
+                    elif pms:
+                        yvecs = [lp_data[key0][key1][sig_name] for key1 in pm_swp for key0 in swp_keys]
                     else:
                         yvecs = [lp_data[key][sig_name] for key in swp_keys]
                 else:
                     if harmonics:
                         yvecs = [lp_data[key][sig_name] for key in harm_swp]
+                    elif pms:
+                        yvecs = [lp_data[key][sig_name] for key in pm_swp]
                 if isinstance(yvecs[0], float):
                     sub_dims = ()   # not used
                     max_dim = 0     # not used

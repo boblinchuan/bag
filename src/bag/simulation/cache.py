@@ -27,7 +27,7 @@ import tempfile
 from pathlib import Path
 from dataclasses import dataclass
 
-from pybag.enum import DesignOutput, LogLevel
+from pybag.enum import DesignOutput, LogLevel, TermType
 from pybag.core import FileLogger, PySchCellViewInfo, get_cdba_name_bits
 
 from ..env import get_gds_layer_map, get_gds_object_map
@@ -38,6 +38,7 @@ from ..util.importlib import import_class
 from ..concurrent.util import GatherHelper
 from ..concurrent.core import batch_async_task
 from ..interface.database import DbAccess
+from ..interface.oa import OAInterface
 from ..design.database import ModuleDB
 from ..design.module import Module
 from ..layout.template import TemplateDB, TemplateBase
@@ -58,11 +59,20 @@ class DesignInstance:
     lay_master: Optional[TemplateBase]
     netlist_path: Path
     cv_info_list: List[PySchCellViewInfo]
-    pin_names: Sequence[str]
+    pins: Mapping[str, TermType]
 
     @property
     def cache_name(self) -> str:
         return self.netlist_path.parent.name
+
+    @property
+    def pin_names(self) -> Sequence[str]:
+        _ports = {TermType.input: [], TermType.output: [], TermType.inout: []}
+        for _name, _type in self.pins.items():
+            # Do not split arrayed pin names into bits here. Use DesignInstance.pin_bit_names if needed.
+            _ports[_type].append(_name)
+        pin_names = _ports[TermType.output] + _ports[TermType.inout] + _ports[TermType.input]
+        return pin_names
 
     @property
     def pin_bit_names(self) -> Sequence[str]:
@@ -163,7 +173,13 @@ class DesignDB(LoggingBase):
                 else:
                     ext_path = None
                     ext_netlist = Path(use_netlist)
-                dut_pins = _info['in_terms'] + _info['out_terms'] + _info['io_terms']
+                dut_pins = {}
+                for _term in _info['out_terms']:
+                    dut_pins[_term] = TermType.output
+                for _term in _info['io_terms']:
+                    dut_pins[_term] = TermType.inout
+                for _term in _info['in_terms']:
+                    dut_pins[_term] = TermType.input
                 dut = DesignInstance(_info['lib_name'], cell_name, None, None, ext_netlist,
                                      [PySchCellViewInfo(static_info)], dut_pins)
             else:
@@ -238,17 +254,23 @@ class DesignDB(LoggingBase):
             sch_cls = lay_master.get_schematic_class_inst()
             layout_hash = hash(lay_master.key)
             gds_file = str(tmp_dir / 'tmp.gds')
-            if export_lay:
-                self._lay_db.batch_layout([(lay_master, impl_cell)], output=DesignOutput.LAYOUT,
-                                          name_prefix=name_prefix, name_suffix=name_suffix,
-                                          exact_cell_names=exact_cell_names)
-                await self._db.async_export_layout(self._lay_db.lib_name, impl_cell, gds_file)
-            else:
-                self._lay_db.batch_layout([(lay_master, impl_cell)], output=DesignOutput.GDS,
-                                          fname=gds_file, name_prefix=name_prefix,
-                                          name_suffix=name_suffix,
-                                          exact_cell_names=exact_cell_names)
+            # always export gds first
+            self._lay_db.batch_layout([(lay_master, impl_cell)], output=DesignOutput.GDS,
+                                      fname=gds_file, name_prefix=name_prefix,
+                                      name_suffix=name_suffix,
+                                      exact_cell_names=exact_cell_names)
             assert is_valid_file(gds_file, None, 60, 1, True)
+            if export_lay:
+                self._db.create_library(self._lay_db.lib_name)
+                # NOTE: don't put name_prefix and name_suffix with impl_cell here.
+                # Sub cells get the prefix and suffix, the top level cell name doesn't.
+                if isinstance(self._db, OAInterface):
+                    self._lay_db.batch_layout([(lay_master, impl_cell)], output=DesignOutput.LAYOUT,
+                                            name_prefix=name_prefix, name_suffix=name_suffix,
+                                            exact_cell_names=exact_cell_names)
+                    await self._db.async_export_layout(self._lay_db.lib_name, impl_cell, gds_file)
+                else:
+                    await self._db.async_import_layout(gds_file, self._lay_db.lib_name, impl_cell)
         else:
             if extract or em:
                 raise ValueError('Cannot run extraction or em simulations without layout.')
@@ -341,7 +363,7 @@ class DesignDB(LoggingBase):
                                                  exact_cell_names=exact_cell_names, flat=flat)
 
         return DesignInstance(self._sch_db.lib_name, impl_cell, sch_master, lay_master, ans, cv_info_out,
-                              sch_master.ordered_pin_names), extract_info, is_cached
+                              sch_master.pins), extract_info, is_cached
 
     async def gds_check_cache(self, gds_file: str, cur_dir: Path) -> bool:
         if not gds_file:
@@ -435,6 +457,14 @@ class SimulationDB(LoggingBase):
     @property
     def gen_sch_tb(self) -> bool:
         return self._dsn_db.gen_sch_tb
+
+    @property
+    def sim_dir_path(self) -> Path:
+        return self._sim.dir_path
+
+    @property
+    def force_sim(self) -> bool:
+        return self._force_sim
 
     def make_tbm(self, tbm_cls: Union[Type[TestbenchManager], str], tbm_specs: Mapping[str, Any],
                  work_dir: Optional[Path] = None, tb_name: str = '',

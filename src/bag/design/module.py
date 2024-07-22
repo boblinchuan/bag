@@ -120,6 +120,14 @@ class Module(DesignMaster):
                 self._orig_lib_name, self._orig_cell_name = self.__class__.__name__.split('__')
                 self.instances: Dict[str, SchInstance] = {}
 
+        # --- BAG2 style --- #
+        if self._cv:
+            self.pin_map = {k: k for k in self._pins}
+        else:
+            self.pin_map = {}
+        self.new_pins = []
+        self.deleted_instances = []
+
         # initialize schematic master
         DesignMaster.__init__(self, database, params, log_file, log_level, copy_state=copy_state, **kwargs)
 
@@ -186,12 +194,12 @@ class Module(DesignMaster):
 
     @property
     def ordered_pin_names(self) -> Sequence[str]:
-        # port order: input, output, inout
+        # port order: output, inout, input
         _ports = {TermType.input: [], TermType.output: [], TermType.inout: []}
         for _name, _type in self.pins.items():
             # Do not split arrayed pin names into bits here. Use DesignInstance.pin_bit_names if needed.
             _ports[_type].append(_name)
-        pin_names = _ports[TermType.input] + _ports[TermType.output] + _ports[TermType.inout]
+        pin_names = _ports[TermType.output] + _ports[TermType.inout] + _ports[TermType.input]
         return pin_names
 
     @abc.abstractmethod
@@ -286,6 +294,32 @@ class Module(DesignMaster):
     def get_content(self, output_type: DesignOutput, rename_dict: Dict[str, str], name_prefix: str,
                     name_suffix: str, shell: bool, exact_cell_names: Set[str],
                     supply_wrap_mode: SupplyWrapMode) -> Tuple[str, Any]:
+        """Returns the content of this Module, i.e. the cellview.
+
+        Parameters
+        ----------
+        output_type : DesignOutput
+            the output type.
+        rename_dict : Dict[str, str]
+            the renaming dictionary.
+        name_prefix : str
+            the name prefix.
+        name_suffix : str
+            the name suffix.
+        shell : bool
+            True if we're just producing a shell content (i.e. just top level block).
+        exact_cell_names : Set[str]
+            set of cell names to keep exact (don't add prefix and suffix)
+        supply_wrap_mode : SupplyWrapMode
+            the netlisting supply wrap mode.
+
+        Returns
+        -------
+        cell_name : str
+            the master cell name.
+        content : Tuple[PySchCellView, str]
+            a tuple containing the cellview and an optional rendered model netlist
+        """
         if not self.finalized:
             raise ValueError('This module is not finalized yet')
 
@@ -295,6 +329,7 @@ class Module(DesignMaster):
         if self.is_primitive():
             return cell_name, (None, '')
 
+        # Model rendering
         netlist = ''
         if not shell and output_type.is_model:
             # NOTE: only get model netlist if we're doing real netlisting (versus shell netlisting)
@@ -313,6 +348,68 @@ class Module(DesignMaster):
                                           _cell_name=cell_name, **model_params)
 
         return cell_name, (self._cv, netlist)
+
+    def get_content_skill(self, output_type: DesignOutput, rename_dict: Dict[str, str],
+                          name_prefix: str, name_suffix: str, shell: bool,
+                          exact_cell_names: Set[str], supply_wrap_mode: SupplyWrapMode
+                          ) -> Tuple[str, Any]:
+        """Returns the content of this Module for Virtuoso schematic creation using SKILL.
+        Performs additional translation of the cellview object into the contents needed for SKILL.
+
+        Parameters are the same as those for `get_content`, for compatibility.
+
+        Returns
+        -------
+        cell_name : str
+            the master cell name.
+        content : Optional[Tuple[str, str, Mapping, Mapping, Sequence, Sequence]]
+            a tuple containing the lib name, cell name, pin map, instance map, additional new pins,
+                and a complete
+        """
+        if not self.finalized:
+            raise ValueError('This module is not finalized yet')
+
+        cell_name = format_cell_name(self.cell_name, rename_dict, name_prefix, name_suffix,
+                                     exact_cell_names, supply_wrap_mode)
+
+        if self.is_primitive():
+            if output_type is DesignOutput.SCHEMATIC:
+                return cell_name, None
+            return cell_name, (None, '')
+
+        # --- BAG2 style --- #
+        # populate instance transform mapping dictionary
+        inst_map = {}
+        for inst_name, inst in self.instances.items():
+            if not inst.should_delete:
+                cur_lib = inst.get_master_lib_name(self.lib_name)
+                _cell_name = inst.master_cell_name
+                if cur_lib != 'BAG_prim':
+                    _cell_name = f'{name_prefix}{_cell_name}{name_suffix}'
+                info = dict(
+                    name=inst_name,
+                    lib_name=cur_lib,
+                    cell_name=_cell_name,
+                    params=inst.params(),
+                    term_mapping=inst.connections(),
+                    dx=inst.dx,
+                    dy=inst.dy,
+                )
+            else:
+                info = None
+            if inst.prev_name:
+                if inst.prev_name in inst_map:
+                    inst_map[inst.prev_name].append(info)
+                else:
+                    inst_map[inst.prev_name] = [info] if info else []
+            else:
+                inst_map[inst_name] = [info] if info else []
+
+        for inst_name in self.deleted_instances:
+            inst_map[inst_name] = []
+
+        return cell_name, (self._orig_lib_name, self._orig_cell_name, self.pin_map, inst_map, self.new_pins,
+                            self.ordered_pin_names)
 
     @property
     def cell_name(self) -> str:
@@ -409,6 +506,7 @@ class Module(DesignMaster):
             the new pin name.
         """
         self._cv.rename_pin(old_pin, new_pin)
+        self.pin_map[old_pin] = new_pin
 
     def add_pin(self, new_pin: str, pin_type: Union[TermType, str],
                 sig_type: SigType = SigType.signal) -> None:
@@ -430,6 +528,11 @@ class Module(DesignMaster):
             pin_type = TermType[pin_type]
 
         self._cv.add_pin(new_pin, pin_type.value, sig_type.value)
+        if pin_type.name == 'inout':
+            npin_type = 'inputOutput'
+        else:
+            npin_type = pin_type.name
+        self.new_pins.append([new_pin, npin_type, sig_type.name])
 
     def get_signal_type(self, pin_name: str) -> SigType:
         if not self.finalized:
@@ -450,6 +553,7 @@ class Module(DesignMaster):
         success : bool
             True if the pin is successfully found and removed.
         """
+        self.pin_map[remove_pin] = ''
         return self._cv.remove_pin(remove_pin)
 
     def set_pin_attribute(self, pin_name: str, key: str, val: str) -> None:
@@ -482,6 +586,10 @@ class Module(DesignMaster):
         """
         self._cv.rename_instance(old_name, new_name)
         self.instances[new_name] = inst = self.instances.pop(old_name)
+        if not inst.prev_name:
+            # 1. If instance has already been arrayed or renamed previously, preserve original prev_name.
+            # 2. Otherwise old_name is the prev_name.
+            inst._prev_name = old_name
         if conn_list:
             for term, net in conn_list:
                 inst.update_connection(new_name, term, net)
@@ -501,6 +609,10 @@ class Module(DesignMaster):
         """
         success = self._cv.remove_instance(inst_name)
         if success:
+            inst = self.instances[inst_name]
+            if not inst.prev_name:
+                # this is an original instance in the schematic template
+                self.deleted_instances.append(inst_name)
             del self.instances[inst_name]
         return success
 
@@ -622,9 +734,23 @@ class Module(DesignMaster):
         # update instance dictionary
         orig_inst = self.instances.pop(inst_name)
         db = orig_inst.database
+        if dx == 0 and dy == 0:
+            dx = orig_inst.width
+        if orig_inst.prev_name:
+            # 1. If instance has already been arrayed or renamed previously, preserve original prev_name, dx, dy.
+            prev_name = orig_inst.prev_name
+            cur_dx = orig_inst.dx
+            cur_dy = orig_inst.dy
+        else:
+            # 2. Otherwise, inst_name is the prev_name.
+            prev_name = inst_name
+            cur_dx = cur_dy = 0
         for name in inst_name_list:
             inst_ptr = self._cv.get_inst_ref(name)
-            self.instances[name] = SchInstance(db, inst_ptr, master=orig_inst.master)
+            self.instances[name] = SchInstance(db, inst_ptr, master=orig_inst.master, prev_name=prev_name,
+                                               dx=cur_dx, dy=cur_dy)
+            cur_dx += dx
+            cur_dy += dy
 
     def design_sources_and_loads(self, params_list: Optional[Sequence[Mapping[str, Any]]] = None,
                                  default_name: str = 'VDC') -> None:
@@ -664,7 +790,7 @@ class Module(DesignMaster):
                 'dcblock': 'C{}',
                 'dcfeed': 'L{}',
                 'idc': 'IDC{}',
-                'ideal_balun': 'BAL{}',
+                'ideal_balun': 'XBAL{}',
                 'ind': 'L{}',
                 'iprobe': 'IPROBE{}',
                 'ipulse': 'IPULSE{}',
@@ -687,6 +813,10 @@ class Module(DesignMaster):
                 'vpulse': 'VPULSE{}',
                 'vpwlf': 'VPWLF{}',
                 'vsin': 'VSIN{}',
+            },
+            'ngspice': {
+                'vtrnoise': 'V{}',
+                'itrnoise': 'I{}',
             }
         }
         type_to_value_dict = {
