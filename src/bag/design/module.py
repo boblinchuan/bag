@@ -294,6 +294,32 @@ class Module(DesignMaster):
     def get_content(self, output_type: DesignOutput, rename_dict: Dict[str, str], name_prefix: str,
                     name_suffix: str, shell: bool, exact_cell_names: Set[str],
                     supply_wrap_mode: SupplyWrapMode) -> Tuple[str, Any]:
+        """Returns the content of this Module, i.e. the cellview.
+
+        Parameters
+        ----------
+        output_type : DesignOutput
+            the output type.
+        rename_dict : Dict[str, str]
+            the renaming dictionary.
+        name_prefix : str
+            the name prefix.
+        name_suffix : str
+            the name suffix.
+        shell : bool
+            True if we're just producing a shell content (i.e. just top level block).
+        exact_cell_names : Set[str]
+            set of cell names to keep exact (don't add prefix and suffix)
+        supply_wrap_mode : SupplyWrapMode
+            the netlisting supply wrap mode.
+
+        Returns
+        -------
+        cell_name : str
+            the master cell name.
+        content : Tuple[PySchCellView, str]
+            a tuple containing the cellview and an optional rendered model netlist
+        """
         if not self.finalized:
             raise ValueError('This module is not finalized yet')
 
@@ -301,45 +327,9 @@ class Module(DesignMaster):
                                      exact_cell_names, supply_wrap_mode)
 
         if self.is_primitive():
-            if output_type is DesignOutput.SCHEMATIC:
-                return cell_name, None
             return cell_name, (None, '')
 
-        if output_type is DesignOutput.SCHEMATIC:
-            # --- BAG2 style --- #
-            # populate instance transform mapping dictionary
-            inst_map = {}
-            for inst_name, inst in self.instances.items():
-                if not inst.should_delete:
-                    cur_lib = inst.get_master_lib_name(self.lib_name)
-                    _cell_name = inst.master_cell_name
-                    if cur_lib != 'BAG_prim':
-                        _cell_name = f'{name_prefix}{_cell_name}{name_suffix}'
-                    info = dict(
-                        name=inst_name,
-                        lib_name=cur_lib,
-                        cell_name=_cell_name,
-                        params=inst.params(),
-                        term_mapping=inst.connections(),
-                        dx=inst.dx,
-                        dy=inst.dy,
-                    )
-                else:
-                    info = None
-                if inst.prev_name:
-                    if inst.prev_name in inst_map:
-                        inst_map[inst.prev_name].append(info)
-                    else:
-                        inst_map[inst.prev_name] = [info] if info else []
-                else:
-                    inst_map[inst_name] = [info] if info else []
-
-            for inst_name in self.deleted_instances:
-                inst_map[inst_name] = []
-
-            return cell_name, (self._orig_lib_name, self._orig_cell_name, self.pin_map, inst_map, self.new_pins,
-                               self.ordered_pin_names)
-
+        # Model rendering
         netlist = ''
         if not shell and output_type.is_model:
             # NOTE: only get model netlist if we're doing real netlisting (versus shell netlisting)
@@ -358,6 +348,68 @@ class Module(DesignMaster):
                                           _cell_name=cell_name, **model_params)
 
         return cell_name, (self._cv, netlist)
+
+    def get_content_skill(self, output_type: DesignOutput, rename_dict: Dict[str, str],
+                          name_prefix: str, name_suffix: str, shell: bool,
+                          exact_cell_names: Set[str], supply_wrap_mode: SupplyWrapMode
+                          ) -> Tuple[str, Any]:
+        """Returns the content of this Module for Virtuoso schematic creation using SKILL.
+        Performs additional translation of the cellview object into the contents needed for SKILL.
+
+        Parameters are the same as those for `get_content`, for compatibility.
+
+        Returns
+        -------
+        cell_name : str
+            the master cell name.
+        content : Optional[Tuple[str, str, Mapping, Mapping, Sequence, Sequence]]
+            a tuple containing the lib name, cell name, pin map, instance map, additional new pins,
+                and a complete
+        """
+        if not self.finalized:
+            raise ValueError('This module is not finalized yet')
+
+        cell_name = format_cell_name(self.cell_name, rename_dict, name_prefix, name_suffix,
+                                     exact_cell_names, supply_wrap_mode)
+
+        if self.is_primitive():
+            if output_type is DesignOutput.SCHEMATIC:
+                return cell_name, None
+            return cell_name, (None, '')
+
+        # --- BAG2 style --- #
+        # populate instance transform mapping dictionary
+        inst_map = {}
+        for inst_name, inst in self.instances.items():
+            if not inst.should_delete:
+                cur_lib = inst.get_master_lib_name(self.lib_name)
+                _cell_name = inst.master_cell_name
+                if cur_lib != 'BAG_prim':
+                    _cell_name = f'{name_prefix}{_cell_name}{name_suffix}'
+                info = dict(
+                    name=inst_name,
+                    lib_name=cur_lib,
+                    cell_name=_cell_name,
+                    params=inst.params(),
+                    term_mapping=inst.connections(),
+                    dx=inst.dx,
+                    dy=inst.dy,
+                )
+            else:
+                info = None
+            if inst.prev_name:
+                if inst.prev_name in inst_map:
+                    inst_map[inst.prev_name].append(info)
+                else:
+                    inst_map[inst.prev_name] = [info] if info else []
+            else:
+                inst_map[inst_name] = [info] if info else []
+
+        for inst_name in self.deleted_instances:
+            inst_map[inst_name] = []
+
+        return cell_name, (self._orig_lib_name, self._orig_cell_name, self.pin_map, inst_map, self.new_pins,
+                            self.ordered_pin_names)
 
     @property
     def cell_name(self) -> str:

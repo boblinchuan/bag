@@ -38,6 +38,7 @@ from ..util.importlib import import_class
 from ..concurrent.util import GatherHelper
 from ..concurrent.core import batch_async_task
 from ..interface.database import DbAccess
+from ..interface.oa import OAInterface
 from ..design.database import ModuleDB
 from ..design.module import Module
 from ..layout.template import TemplateDB, TemplateBase
@@ -263,11 +264,13 @@ class DesignDB(LoggingBase):
                 self._db.create_library(self._lay_db.lib_name)
                 # NOTE: don't put name_prefix and name_suffix with impl_cell here.
                 # Sub cells get the prefix and suffix, the top level cell name doesn't.
-                await self._db.async_import_layout(gds_file, self._lay_db.lib_name, impl_cell)
-                # self._lay_db.batch_layout([(lay_master, impl_cell)], output=DesignOutput.LAYOUT,
-                #                           name_prefix=name_prefix, name_suffix=name_suffix,
-                #                           exact_cell_names=exact_cell_names)
-                # await self._db.async_export_layout(self._lay_db.lib_name, impl_cell, gds_file)
+                if isinstance(self._db, OAInterface):
+                    self._lay_db.batch_layout([(lay_master, impl_cell)], output=DesignOutput.LAYOUT,
+                                            name_prefix=name_prefix, name_suffix=name_suffix,
+                                            exact_cell_names=exact_cell_names)
+                    await self._db.async_export_layout(self._lay_db.lib_name, impl_cell, gds_file)
+                else:
+                    await self._db.async_import_layout(gds_file, self._lay_db.lib_name, impl_cell)
         else:
             if extract or em:
                 raise ValueError('Cannot run extraction or em simulations without layout.')

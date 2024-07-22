@@ -61,6 +61,7 @@ from pybag.core import PySchCellViewInfo
 from .io.file import write_yaml, read_yaml
 from .interface import ZMQDealer
 from .interface.lef import LEFInterface
+from .interface.oa import OAInterface
 from .design.netlist import add_mismatch_offsets
 from .design.database import ModuleDB
 from .design.module import Module
@@ -483,10 +484,13 @@ class BagProject:
                                         exact_cell_names=exact_cell_names,
                                         square_bracket=square_bracket)
                 if not raw:
-                    # import the gds into Virtuoso
-                    self.import_layout(layout_file, impl_lib, f'{name_prefix}{impl_cell}{name_suffix}')
-                    # lay_db.batch_layout(dut_list, output=DesignOutput.LAYOUT,
-                    #                     exact_cell_names=exact_cell_names)
+                    # Create layout view in Virtuoso
+                    if isinstance(self.impl_db, OAInterface):
+                        lay_db.batch_layout(dut_list, output=DesignOutput.LAYOUT,
+                                            exact_cell_names=exact_cell_names)
+                    else:
+                        self.import_layout(layout_file, impl_lib,
+                                           f'{name_prefix}{impl_cell}{name_suffix}')
 
                 t1 = time.perf_counter()
                 print(f'layout done: time taken = {t1 - t0}')
@@ -494,21 +498,6 @@ class BagProject:
             sch_params = lay_master.sch_params
         else:
             sch_params = params
-
-        # Layout is already created as gds first, so re-exporting is not necessary.
-        # if export_lay and not raw:
-        #     print('exporting layout')
-        #     layout_file = (layout_file_override or
-        #                    str(root_path / f'{impl_cell}.{layout_ext}'))
-        #     export_params = dict(square_bracket=square_bracket,
-        #                          output_type=lay_type_list[0])
-        #     self.impl_db.export_layout(impl_lib, impl_cell, layout_file,
-        #                                params=export_params)
-        #     for out_type in lay_type_list[1:]:
-        #         export_params['output_type'] = out_type
-        #         cur_file = str(root_path / f'{impl_cell}.{out_type.extension}')
-        #         self.impl_db.export_layout(impl_lib, impl_cell, cur_file,
-        #                                    params=export_params)
 
         has_sch = sch_cls is not None
 
