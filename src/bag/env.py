@@ -250,3 +250,8 @@ def get_bag_device_map(name: str) -> List[Tuple[str, str]]:
 def get_tech_global_info(prj_name: str) -> Dict[str, Any]:
     path = f'data/{prj_name}/specs_global/tech_global.yaml'
     return read_yaml(path)
+
+
+def can_use_oa_view() -> bool:
+    """Check if OA libraries are available. Use the key checked by pybag."""
+    return 'OA_LINK_DIR' in os.environ

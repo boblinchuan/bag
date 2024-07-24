@@ -4,6 +4,7 @@ build
 dist
 bag.egg-info
 __pycache__
+bag.log
 
 # Pycharm related files
 .idea/workspace.xml

@@ -54,7 +54,7 @@ import scipy.ndimage.interpolation as imag_interp
 from ..math.dfun import DiffFunction
 
 __author__ = 'erichang'
-__all__ = ['interpolate_grid', 'LinearInterpolator']
+__all__ = ['interpolate_grid', 'LinearInterpolator', 'interpolate_unstructured']
 
 
 def _scales_to_points(scale_list: List[Tuple[float, float]], values: np.ndarray,

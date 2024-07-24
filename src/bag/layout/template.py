@@ -53,6 +53,7 @@ from typing import (
 from bag.typing import PointType
 from bag.util.search import BinaryIterator
 from bag.env import create_routing_grid_from_file
+from bag.env import create_routing_grid_from_file
 
 import abc
 from itertools import product
@@ -2679,14 +2680,18 @@ class TemplateBase(DesignMaster):
             the layer ID on which to draw power fill.
         tr_manager : TrackManager
             the TrackManager object.
-        sup_list : List[Union[WireArray, List[WireArray]]]
-            a list of supply wires to draw power fill for.
+        vdd_warrs : Optional[Union[WireArray, List[WireArray]]]
+            the list of VDD wires to draw power fill for.
+        vss_warrs : Optional[Union[WireArray, List[WireArray]]]
+            the list of VSS wires to draw power fill for.
         bound_box : Optional[BBox]
             bound box over which to draw the power fill
         x_margin : int
             keepout margin on the x-axis. Fill is centered within margin.
         y_margin : int
             keepout margin on the y-axis. Fill is centered within margin.
+        sup_type: str
+            'both' (default) or 'vdd' or 'vss'
         uniform_grid : bool
             draw power fill on a common grid instead of dense packing.
         flip : bool
@@ -2723,15 +2728,16 @@ class TemplateBase(DesignMaster):
         elif sup_type.lower() == 'vss':
             top_vdd = []
             top_vss = ret_warrs[0]
-        elif sup_type.lower() == 'vdd':
+        else:   # sup_type.lower() == 'vdd':
             top_vss = []
             top_vdd = ret_warrs[0]
 
         return top_vdd, top_vss
 
-    def do_multi_power_fill(self, layer_id: int, tr_manager: TrackManager, sup_list: List[Union[WireArray, List[WireArray]]],
-                            bound_box: Optional[BBox] = None, x_margin: int = 0, y_margin: int = 0, flip: bool = False,
-                            uniform_grid: bool = False) -> List[List[WireArray]]:
+    def do_multi_power_fill(self, layer_id: int, tr_manager: TrackManager,
+                            sup_list: List[Union[WireArray, List[WireArray]]], bound_box: Optional[BBox] = None,
+                            x_margin: int = 0, y_margin: int = 0, flip: bool = False, uniform_grid: bool = False
+                            ) -> List[List[WireArray]]:
         """Draw power fill on the given layer. Accepts as many different supply nets as provided.
 
         Parameters
@@ -2766,14 +2772,16 @@ class TemplateBase(DesignMaster):
         bound_box = bound_box.expand(dx=-x_margin, dy=-y_margin)
         is_horizontal = (self.grid.get_direction(layer_id) == 0)
         num_sups = len(sup_list)
-        if is_horizontal:
-            cl, cu = bound_box.yl, bound_box.yh
-            lower, upper = bound_box.xl, bound_box.xh
-        else:
-            cl, cu = bound_box.xl, bound_box.xh
-            lower, upper = bound_box.yl, bound_box.yh
         fill_width = tr_manager.get_width(layer_id, 'sup')
         fill_space = tr_manager.get_sep(layer_id, ('sup', 'sup'))
+        fill_w2 = self.grid.get_wire_total_width(layer_id, fill_width) >> 1
+        # subtract fill_w2 from edges so that tracks don't get drawn beyond BBox boundaries
+        if is_horizontal:
+            cl, cu = bound_box.yl + fill_w2, bound_box.yh - fill_w2
+            lower, upper = bound_box.xl, bound_box.xh
+        else:
+            cl, cu = bound_box.xl + fill_w2, bound_box.xh - fill_w2
+            lower, upper = bound_box.yl, bound_box.yh
         sep_margin = tr_manager.get_sep(layer_id, ('sup', ''))
         tr_bot = self.grid.coord_to_track(layer_id, cl, mode=RoundMode.GREATER_EQ)
         tr_top = self.grid.coord_to_track(layer_id, cu, mode=RoundMode.LESS_EQ)

@@ -132,7 +132,7 @@ class TestbenchManager(abc.ABC):
 
         self._work_dir.mkdir(parents=True, exist_ok=True)
         self._specs: Dict[str, Any] = {k: deepcopy(v) for k, v in specs.items()
-                                       if k is not 'sim_params' and k is not 'env_params'}
+                                       if k != 'sim_params' and k != 'env_params'}
         self._specs['sim_params'] = {k: v for k, v in specs['sim_params'].items()}
         self._specs['env_params'] = {k: v.copy() for k, v in specs.get('env_params', {}).items()}
         self.commit()
@@ -254,6 +254,7 @@ class TestbenchManager(abc.ABC):
             swp_info=self.swp_info,
             options=self._specs.get('sim_options', {}),
             monte_carlo=self._specs.get('monte_carlo_params', {}),
+            init_voltages=self._specs.get('init_voltages', {}),
             env_params=env_values,
         )
         return sim_setup
