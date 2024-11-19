@@ -476,7 +476,7 @@ class Module(DesignMaster):
             pin_type = TermType[pin_type]
 
         self._cv.add_pin(new_pin, pin_type.value, sig_type.value)
-        if pin_type.name is 'inout':
+        if pin_type.name == 'inout':
             npin_type = 'inputOutput'
         else:
             npin_type = pin_type.name
@@ -738,7 +738,7 @@ class Module(DesignMaster):
                 'dcblock': 'C{}',
                 'dcfeed': 'L{}',
                 'idc': 'IDC{}',
-                'ideal_balun': 'BAL{}',
+                'ideal_balun': 'XBAL{}',
                 'ind': 'L{}',
                 'iprobe': 'IPROBE{}',
                 'ipulse': 'IPULSE{}',
@@ -761,6 +761,10 @@ class Module(DesignMaster):
                 'vpulse': 'VPULSE{}',
                 'vpwlf': 'VPWLF{}',
                 'vsin': 'VSIN{}',
+            },
+            'ngspice': {
+                'vtrnoise': 'V{}',
+                'itrnoise': 'I{}',
             }
         }
         type_to_value_dict = {

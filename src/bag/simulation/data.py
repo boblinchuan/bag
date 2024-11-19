@@ -53,6 +53,7 @@ class SweepInfoType(Enum):
 
 @dataclass(eq=True, frozen=True)
 class SweepList:
+    type: SweepSpecType.LIST
     values: ImmutableList[float]
 
     def __len__(self) -> int:
@@ -62,10 +63,19 @@ class SweepList:
     def start(self) -> float:
         return self.values[0]
 
+    @property
+    def stop(self) -> float:
+        return self.values[-1]
+
+    @property
+    def num(self) -> int:
+        return len(self.values)
+
 
 @dataclass(eq=True, frozen=True)
 class SweepLinear:
     """stop is inclusive"""
+    type: SweepSpecType.LINEAR
     start: float
     stop: float
     num: int
@@ -91,6 +101,7 @@ class SweepLinear:
 @dataclass(eq=True, frozen=True)
 class SweepLog:
     """stop is inclusive"""
+    type: SweepSpecType.LOG
     start: float
     stop: float
     num: int
@@ -125,11 +136,11 @@ SweepSpec = Union[SweepLinear, SweepLog, SweepList]
 def swp_spec_from_dict(table: Mapping[str, Any]) -> SweepSpec:
     swp_type = SweepSpecType[table['type']]
     if swp_type is SweepSpecType.LIST:
-        return SweepList(ImmutableList(table['values']))
+        return SweepList(swp_type, ImmutableList(table['values']))
     elif swp_type is SweepSpecType.LINEAR:
-        return SweepLinear(table['start'], table['stop'], table['num'], table.get('endpoint', True))
+        return SweepLinear(swp_type, table['start'], table['stop'], table['num'], table.get('endpoint', True))
     elif swp_type is SweepSpecType.LOG:
-        return SweepLog(table['start'], table['stop'], table['num'], table.get('endpoint', True))
+        return SweepLog(swp_type, table['start'], table['stop'], table['num'], table.get('endpoint', True))
     else:
         raise ValueError(f'Unsupported sweep type: {swp_type}')
 
@@ -259,6 +270,12 @@ class AnalysisSweep1D:
     def param_start(self) -> float:
         if self.param:
             return self.sweep.start
+        return 0.0
+
+    @property
+    def param_stop(self) -> float:
+        if self.param:
+            return self.sweep.stop
         return 0.0
 
 
@@ -514,6 +531,9 @@ class AnalysisData:
         self._signals = [key for key in data.keys() if key not in swp_set]
 
     def __getitem__(self, item: str) -> np.ndarray:
+        if item not in self._data:
+            # Certain simulators are case insensitive and return lower case.
+            item = item.lower()
         return self._data[item]
 
     def __contains__(self, item: str) -> bool:
