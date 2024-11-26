@@ -665,10 +665,10 @@ class BagProject:
 
         return final_netlist
 
-    def extract_cell(self, lib_name: str, cell_name: str, extract_type: Optional[str], extract_corner: Optional[str]
-                     ) -> None:
+    def extract_cell(self, lib_name: str, cell_name: str, extract_type: Optional[str], extract_corner: Optional[str],
+                     netlist: str) -> None:
         print('running LVS...')
-        lvs_passed, lvs_log = self.run_lvs(lib_name, cell_name, run_rcx=True)
+        lvs_passed, lvs_log = self.run_lvs(lib_name, cell_name, run_rcx=True, netlist=netlist)
         if lvs_passed:
             print('LVS passed!')
             print('running RCX...')
@@ -680,7 +680,7 @@ class BagProject:
             if extract_corner:
                 rcx_params['extract_corner'] = extract_corner
                 _suf += f'_{extract_corner}'
-            final_netlist, rcx_log = self.run_rcx(lib_name, cell_name, params=rcx_params)
+            final_netlist, rcx_log = self.run_rcx(lib_name, cell_name, params=rcx_params, netlist=netlist)
             if final_netlist:
                 print('RCX passed!')
                 root_path = self.get_root_path(Path(f'gen_outputs/{lib_name}/{cell_name}'), use_sim_path=False)

@@ -585,20 +585,21 @@ class AnalysisData:
 
         # get last sweep parameter
         last_par = swp_par_list[-1]
-        last_xvec = data0[last_par]
-        xvec_list = [data[last_par] for data in data_list]
-        for xvec in xvec_list:
-            if not np.array_equal(xvec_list[0], xvec):
-                # last sweep parameter has to be a multi dimensional array
-                sizes = [x.shape for x in xvec_list]
-                cur_ans = np.full((len(xvec_list),) + tuple(max_size), np.nan)
-                for idx, _xvec in enumerate(xvec_list):
-                    # noinspection PyTypeChecker
-                    select = (idx, ...) + tuple(slice(0, s) for s in sizes[idx])
-                    cur_ans[select] = _xvec
-                last_xvec = np.moveaxis(cur_ans, 0, axis)
-                break
-        new_data[last_par] = last_xvec
+        if last_par != 'corner':
+            last_xvec = data0[last_par]
+            xvec_list = [data[last_par] for data in data_list]
+            for xvec in xvec_list:
+                if not np.array_equal(xvec_list[0], xvec):
+                    # last sweep parameter has to be a multi dimensional array
+                    sizes = [x.shape for x in xvec_list]
+                    cur_ans = np.full((len(xvec_list),) + tuple(max_size), np.nan)
+                    for idx, _xvec in enumerate(xvec_list):
+                        # noinspection PyTypeChecker
+                        select = (idx, ...) + tuple(slice(0, s) for s in sizes[idx])
+                        cur_ans[select] = _xvec
+                    last_xvec = np.moveaxis(cur_ans, 0, axis)
+                    break
+            new_data[last_par] = last_xvec
 
         # get all other sweep params
         for sn in swp_par_list[:-1]:
