@@ -944,9 +944,9 @@ jinja_env = Environment(
 prefix_dict = {
     'mos_cdl': 'M',
     'mos3_cdl': 'M',
-    'mos3_cir': 'M',
     'mos_scs': 'M',
     'mos3_scs': 'M',
+    'mos_cir': 'M',
     'mos3_cir': 'M',
     'diode_cdl': 'X',
     'diode_scs': 'X',
@@ -1125,6 +1125,8 @@ def populate_res(config: Dict[str, Any], netlist_map: Dict[str, Any], inc_lines:
 
 
 def populate_mim(config: Dict[str, Any], netlist_map: Dict[str, Any], inc_lines: Dict[DesignOutput, List[str]]) -> None:
+    if 'types' not in config:
+        return
     for idx, (cell_name, model_name) in enumerate(config['types']):
         # populate netlist_map
         cur_info = copy.deepcopy(mim_default)
