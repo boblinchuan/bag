@@ -1360,8 +1360,10 @@ procedure( modify_schematic_content(sch_cv inst_list "gl")
                     when(cur_inst->name != rinst->name
                         cur_inst->name = rinst->name
                     )
-                    schReplaceProperty(list(cur_inst) "master" sprintf(nil "%s %s %s" rinst->lib_name
-                                                                       rinst->cell_name cur_inst->viewName))
+                    ; schReplaceProperty(list(cur_inst) "master" sprintf(nil "%s %s %s" rinst->lib_name
+                    ;                                                    rinst->cell_name cur_inst->viewName))
+                    schReplaceProperty(list(cur_inst) "libName" rinst->lib_name)
+                    schReplaceProperty(list(cur_inst) "cellName" rinst->cell_name)
                     ; set parameters
                     foreach( cdf_par cdfGetInstCDF(cur_inst)~>parameters
                         par_val = cadr(assoc(cdf_par->name rinst->params))
