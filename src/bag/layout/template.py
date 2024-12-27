@@ -3031,7 +3031,13 @@ class TemplateBase(DesignMaster):
                     _num = num_wires_p
                 else:
                     _num = len(coord_list_p)
-                    _tidx_list = [self.grid.coord_to_track(_layer, coord, RoundMode.NEAREST) for coord in coord_list_p]
+                    if alignment_p == 0:
+                        mode = RoundMode.NEAREST
+                    elif alignment_p == -1:
+                        mode = RoundMode.LESS_EQ
+                    else:
+                        mode = RoundMode.GREATER_EQ
+                    _tidx_list = [self.grid.coord_to_track(_layer, coord, mode) for coord in coord_list_p]
             else:
                 # Orthogonal direction
                 _tidx_list = [self.grid.coord_to_track(_layer, coord, RoundMode.NEAREST) for coord in coord_list_o]
