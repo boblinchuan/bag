@@ -168,6 +168,9 @@ class VirtuosoChecker(SubProcessChecker, ABC):
                 ctl_params['layout_type'] = 'GDSII'
             elif ext == DesignOutput.OASIS.extension:
                 ctl_params['layout_type'] = 'OASIS'
+            elif ext == DesignOutput.CDL.extension:
+                # For netlist-vs-netlist support
+                ctl_params['layout_type'] = 'SPICE'
             else:
                 raise ValueError(f'Cannot determine layout type from layout file name: {lay_path}')
             ctl_params['layout_file'] = str(lay_path)
