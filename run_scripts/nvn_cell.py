@@ -28,6 +28,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+# Run NVN on two raw netlist files
 
 import argparse
 
@@ -38,15 +39,16 @@ register_pdb_hook()
 
 
 def parse_options() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description='Run LVL on two GDS files from arguments.')
-    parser.add_argument('gds_file', help='GDS file path.')
-    parser.add_argument('ref_file', help='Reference GDS file path.')
+    parser = argparse.ArgumentParser(description='Run NVN on two CDL files from arguments.')
+    parser.add_argument('cell_name', help='Cell name.')
+    parser.add_argument('netlist', help='Netlist file path.')
+    parser.add_argument('ref_file', help='Reference netlist file path.')
     args = parser.parse_args()
     return args
 
 
 def run_main(prj: BagProject, args: argparse.Namespace) -> None:
-    prj.lvl_cell(gds_file=args.gds_file, ref_file=args.ref_file)
+    prj.nvn_cell(cell_name=args.cell_name, netlist=args.netlist, ref_file=args.ref_file)
 
 
 if __name__ == '__main__':

@@ -666,6 +666,16 @@ class BagProject:
         return final_netlist
 
     def lvs_cell(self, lib_name: str, cell_name: str) -> None:
+        """Run layout-vs-schematic (LVS) on a cell. Exports netlist and GDS from OA views.
+        
+        Parameters
+        ----------
+        lib_name : str
+            Library name
+        cell_name : str
+            Cell name
+        
+        """
         print('running LVS...')
         lvs_passed, lvs_log = self.run_lvs(lib_name, cell_name, run_rcx=True)
         if lvs_passed:
@@ -674,6 +684,18 @@ class BagProject:
             raise ValueError(f'LVS failed... log file: {lvs_log}')
     
     def lvs_cell_raw(self, cell_name: str, layout: str, netlist: str) -> None:
+        """Run layout-vs-schematic (LVS) on a cell given the netlist and GDS path.
+        
+        Parameters
+        ----------
+        cell_name : str
+            Cell name
+        layout : str
+            GDS file path
+        netlist : str
+            Netlist file path
+        
+        """
         print('running LVS...')
         lvs_passed, lvs_log = self.run_lvs("", cell_name, layout=layout, netlist=netlist)
         if lvs_passed:
@@ -682,6 +704,16 @@ class BagProject:
             raise ValueError(f'LVS failed... log file: {lvs_log}')
     
     def lvl_cell(self, gds_file: str, ref_file: str) -> None:
+        """Run layout-vs-layout (LVL) on two GDS files.
+        
+        Parameters
+        ----------
+        gds_file : str
+            GDS file path
+        ref_file : str
+            Reference GDS file path
+        
+        """
         print('running LVL...')
         lvl_passed, lvl_log = self.run_lvl(gds_file, ref_file)
         if lvl_passed:
@@ -690,6 +722,18 @@ class BagProject:
             raise ValueError(f'LVL failed... log file: {lvl_log}')
     
     def nvn_cell(self, cell_name: str, netlist: str, ref_file: str) -> None:
+        """Run netlist-vs-netlist (NVN) on two netlist files.
+        
+        Parameters
+        ----------
+        cell_name : str
+            Cell name
+        netlist : str
+            Netlist file path
+        ref_file : str
+            Reference netlist file path
+        
+        """
         print('running NVN...')
         nvn_passed, nvn_log = self.run_nvn(cell_name, netlist, ref_file)
         if nvn_passed:

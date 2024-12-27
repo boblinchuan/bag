@@ -258,7 +258,7 @@ class Calibre(VirtuosoChecker):
             if run_dir:
                 run_dir = Path(run_dir).resolve()
             else:
-                run_dir = root_dir  # TODO: anyways to get a cell_name or something?
+                run_dir = root_dir  # TODO: any way to get a cell_name or something?
         else:
             run_dir = run_dir.resolve()
         run_dir.mkdir(parents=True, exist_ok=True)

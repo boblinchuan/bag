@@ -28,6 +28,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+# Run LVS on raw GDS and netlist files
 
 import argparse
 
@@ -38,15 +39,16 @@ register_pdb_hook()
 
 
 def parse_options() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description='Run LVS on cell from arguments.')
-    parser.add_argument('lib_name', help='Library name.')
+    parser = argparse.ArgumentParser(description='Run LVS on raw netlist and GDS from arguments.')
     parser.add_argument('cell_name', help='Cell name.')
+    parser.add_argument('layout', help='GDS file path.')
+    parser.add_argument('netlist', help='Netlist file path.')
     args = parser.parse_args()
     return args
 
 
 def run_main(prj: BagProject, args: argparse.Namespace) -> None:
-    prj.lvs_cell(lib_name=args.lib_name, cell_name=args.cell_name)
+    prj.lvs_cell_raw(cell_name=args.cell_name, layout=args.layout, netlist=args.netlist)
 
 
 if __name__ == '__main__':
