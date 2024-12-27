@@ -94,7 +94,7 @@ jobs:
         with:
           path: pybag/_build
           key:
-            pybag-${{ runner.os }}-u2004--${{ runner.arch }}--${{
+            pybag-${{ runner.os }}-2004--${{ runner.arch }}--${{
             hashFiles('environment.yml') }}-${{
             env.PYBAG_COMMIT }}
         env:

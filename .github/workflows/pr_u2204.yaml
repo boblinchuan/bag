@@ -95,8 +95,8 @@ jobs:
         with:
           path: pybag/_build
           key:
-            pybag-${{ runner.os }}-u2004--${{ runner.arch }}--${{
-            hashFiles('environment.yml') }}-${{
+            pybag-${{ runner.os }}-2204--${{ runner.arch }}--${{
+            hashFiles('env_3p8.yml') }}-${{
             env.PYBAG_COMMIT }}
         env:
             # Increase this value to reset cache if etc/example-environment.yml has not changed
